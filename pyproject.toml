@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+
+[project]
+name = "cobo-cli"
+version = "0.1.0"  # This is a placeholder; the actual version is set dynamically by setuptools_scm
+description = "Cobo CLI tool"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Cobo", email = "support@cobo.com"},
+]
+
+[project.scripts]
+cobo = "cobo_cli.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cobo_cli*"]
+
+[tool.poetry.dependencies]
+python = "^3.8"

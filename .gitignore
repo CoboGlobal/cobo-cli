@@ -1,0 +1,47 @@
+cobo_cli.egg-info
+.config
+tags
+__pycache__
+*.pyc
+*.pid
+*.log
+*.swo
+*.swp
+*.pyc
+*.mo
+.env
+*.sqlite3
+pre_settings.py
+local_settings.py
+settings/*
+logs/*
+node_modules
+ENV
+celerybeat-schedule
+static/*
+.idea/*
+.DS_Store
+.venv
+venv/
+signer/venv
+fort
+.vscode/
+# Unit testing related
+.tox
+.coverage
+.pytest_cache
+coverage.xml
+allure-results
+src/
+!waas2/sdk/templates/java/src/
+!waas2/sdk/templates/js/src/
+waas2/sdk/build/
+_trial_temp
+# Docker
+docker/custody/logs/*
+# pyenv
+.python-version
+.db_ut.sqlite3-journal
+dist/
+cobo.egg-info/
+build/
