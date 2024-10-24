@@ -41,5 +41,5 @@ cobo = "cobo_cli.cli:cli"
 
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core", "setuptools>=45", "wheel"]
 build-backend = "poetry.core.masonry.api"
