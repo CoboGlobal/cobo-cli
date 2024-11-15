@@ -1,18 +1,33 @@
 import logging
-import os
-from pathlib import Path
-
-import click
-
-from cobo_cli.commands import app, config, keys, login, logout, open, doc, env, get_api, post_api, put_api, delete_api, auth, logs, graphql, webhook
-from cobo_cli.data.context import CommandContext
-from cobo_cli.data.environments import EnvironmentType
-from cobo_cli.data.auth_methods import AuthMethodType
-from cobo_cli.managers.config_manager import ConfigManager 
-from cobo_cli.utils.api import load_api_spec
 
 # Import version from pyproject.toml
 from importlib.metadata import version as get_version
+
+import click
+
+from cobo_cli.commands import (
+    app,
+    auth,
+    config,
+    delete_api,
+    doc,
+    env,
+    get_api,
+    graphql,
+    keys,
+    login,
+    logout,
+    logs,
+    open,
+    post_api,
+    put_api,
+    webhook,
+)
+from cobo_cli.data.auth_methods import AuthMethodType
+from cobo_cli.data.context import CommandContext
+from cobo_cli.data.environments import EnvironmentType
+from cobo_cli.utils.api import load_api_spec
+from cobo_cli.utils.config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -23,20 +38,25 @@ def setup_logging(enable_debug: bool) -> None:
         format="%(levelname)s\t%(asctime)s\t[%(name)s] %(message)s",
     )
 
+
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
 @click.option(
     "-e",
     "--env",
+    "env_type",
     type=click.Choice(EnvironmentType.values()),
     help="Override the environment for this command.",
 )
 @click.option(
     "-a",
     "--auth",
+    "auth_type",
     type=click.Choice(AuthMethodType.values()),
     help="Override the authentication method for this command.",
 )
-@click.option("--enable-debug", is_flag=True, help="Enable debug mode for verbose logging.")
+@click.option(
+    "--enable-debug", is_flag=True, help="Enable debug mode for verbose logging."
+)
 @click.option(
     "--config-file",
     default=ConfigManager.get_config_file_path(),
@@ -49,43 +69,57 @@ def setup_logging(enable_debug: bool) -> None:
     help="Path to a custom OpenAPI specification file",
 )
 @click.pass_context
-def cli(ctx: click.Context, env: str, auth: str, enable_debug: bool, config_file: str, custom_spec_path: str) -> None:
+def cli(
+    ctx: click.Context,
+    env_type: str,
+    auth_type: str,
+    enable_debug: bool,
+    config_file: str,
+    custom_spec_path: str,
+) -> None:
     """Cobo CLI - A command-line interface for managing Cobo applications and configurations."""
     setup_logging(enable_debug)
 
-    config_manager = ConfigManager(config_file)
-    
-    # If env is not specified, try to load it from the config
-    if not env:
-        env = config_manager.get_config("environment")
-    
-    # If env is still not set, default to 'dev'
-    env = env or EnvironmentType.DEVELOPMENT.value
+    config_manager = ConfigManager(config_file, env_type)
 
-    # If auth is not specified, try to load it from the config
-    if not auth:
-        auth = config_manager.get_config("auth_method")
+    # If current_env is not specified, try to load it from the config
+    if not env_type:
+        env_type = config_manager.get_config("environment")
 
-    auth = auth or AuthMethodType.APIKEY.value
+    # If current_env is still not set, default to 'dev'
+    env_type = env_type or EnvironmentType.DEVELOPMENT.value
+
+    # If auth_type is not specified, try to load it from the config
+    if not auth_type:
+        auth_type = config_manager.get_config("auth_method")
+
+    auth_type = auth_type or AuthMethodType.APIKEY.value
 
     # Load API spec
     api_spec = load_api_spec(custom_spec_path) if custom_spec_path else None
 
     # Create CommandContext and store it in ctx.obj
     ctx.obj = CommandContext(
-        env=EnvironmentType(env),
-        auth_method=AuthMethodType(auth),
+        env=EnvironmentType(env_type),
+        auth_method=AuthMethodType(auth_type),
         config_manager=config_manager,
-        api_spec=api_spec
+        api_spec=api_spec,
     )
 
-    logger.debug(f"MainCommand called with parameters: environment={env}, auth={auth}, config_file={config_file}, custom_spec_path={custom_spec_path}")
+    logger.debug(
+        f"MainCommand called with parameters: "
+        f"environment={env_type}, auth={auth_type}, "
+        f"config_file={config_file}, "
+        f"custom_spec_path={custom_spec_path}"
+    )
     logger.debug(f"Command context obj: {ctx.obj}")
+
 
 @cli.command("version", help="Display the current version of the Cobo CLI tool.")
 def version():
     """Display the current version of the Cobo CLI tool."""
     click.echo(f"Cobo CLI version: {get_version('cobo-cli')}")
+
 
 # Add subcommands
 cli.add_command(config)

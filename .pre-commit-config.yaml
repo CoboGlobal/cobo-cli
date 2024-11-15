@@ -5,13 +5,13 @@ repos:
     hooks:
     -   id: isort
         name: isort (python)
+        args: ["--profile", "black", "--filter-files"]
 
 -   repo: https://github.com/psf/black
     rev: 24.8.0
     hooks:
     -   id: black
         language_version: python3
-        args: [--line-length=99]
         exclude: /(\\.eggs|\\.git|\\.hg|\\.mypy_cache|\\.nox|\\.tox|\\.venv|_build|buck-out|build|dist|migrations|_pb2|pycoin)/
 
 -   repo: https://github.com/pycqa/flake8
@@ -20,8 +20,8 @@ repos:
     -   id: flake8
         language_version: python3.10
         exclude: /(migrations|_pb2)/
+        args: ["--config", ".flake8"]
         additional_dependencies: ["importlib-metadata==4.13.0"]
-        args: [--max-line-length=99]
 
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
@@ -41,7 +41,7 @@ repos:
     -   id: bandit
         language_version: python3
         exclude: /(migrations|_pb2|pycoin|deprecated)/
-        args: [ -r,  -c ,".bandit_scan.cfg", -f , "txt",  -o , "bandit_scan.log",  --baseline, ".bandit_baseline.json" , $(git ls-files) ]
+        args: ["-r", "-c",".bandit_scan.cfg", "-f", "txt", "-o", "bandit_scan.log", "--baseline", ".bandit_baseline.json", $(git ls-files) ]
         additional_dependencies: ["importlib-metadata==4.13.0"]
 
 -   repo: https://github.com/PyCQA/autoflake

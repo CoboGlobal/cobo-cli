@@ -1,16 +1,23 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, validator, field_validator
-from typing import Optional, Union, Dict
-import tomli
-import tomli_w
 import os
 from pathlib import Path
+from typing import Dict, Optional, Union
 
+import tomli
+import tomli_w
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from cobo_cli.data.environments import EnvironmentType
 
 default_manifest_file = "manifest.json"
 
+user_access_token_key = "user_access_token"
+org_access_token_key = "org_access_token"
+
+
 def get_config_path() -> str:
-    return os.environ.get("COBO_ENV", str(Path.home() / ".cobo"))
+    return str(Path.home() / ".cobo")
+
 
 class CoboSettings(BaseSettings):
     environment: str = Field(..., env="COBO_ENVIRONMENT")
@@ -23,27 +30,31 @@ class CoboSettings(BaseSettings):
     websocket_host: Optional[str] = Field(None, env="COBO_WEBSOCKET_HOST")
     base_url: Optional[str] = Field(None, env="COBO_BASE_URL")
 
-    model_config = SettingsConfigDict(env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="allow")
 
-    @field_validator('environment')
+    @field_validator("environment")
     def validate_environment(cls, v):
-        if v not in {'sandbox', 'dev', 'prod'}:
+        if v not in {"sandbox", "dev", "prod"}:
             raise ValueError("Environment must be one of 'sandbox', 'dev', 'prod'")
         return v
 
-    @field_validator('auth_method')
+    @field_validator("auth_method")
     def validate_auth_method(cls, v):
-        if v not in {'apikey', 'org', 'user'}:
+        if v not in {"apikey", "org", "user"}:
             raise ValueError("Auth method must be one of 'apikey', 'org', 'user'")
         return v
 
+
 class ConfigManager:
-    def __init__(self, config_file: str = None):
+    def __init__(self, config_file: str = None, env_type: str = None):
         self.config_file = config_file if config_file else self.get_config_file_path()
-        
+
         if not os.path.exists(self.config_file):
             self.create_default_config()
-        
+
+        if env_type is not None and env_type not in EnvironmentType.values():
+            raise Exception(f"Invalid env type: {env_type}")
+        self.env_type = env_type
         self.config_data = self.load_config_data()
         self.settings = self.load_settings()
 
@@ -60,7 +71,9 @@ class ConfigManager:
 
     def load_settings(self):
         common_config = self.config_data.get("common", {})
-        env_config = self.config_data.get(common_config.get("environment", "dev"), {})
+        env_config = self.config_data.get(
+            self.env_type or common_config.get("environment", "dev"), {}
+        )
         combined_config = {**common_config, **env_config}
         return CoboSettings.model_validate(combined_config)
 
@@ -102,7 +115,7 @@ base_url = "https://portal.cobo.com"
             if current_env not in self.config_data:
                 self.config_data[current_env] = {}
             self.config_data[current_env][key] = value
-        
+
         self.save_config()
         self.settings = self.load_settings()
         return True

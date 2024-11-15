@@ -1,31 +1,19 @@
 # 开发、安装与运行
 ## 本地开发安装
 
-### 方式一 使用 pip 进行本地安装
 在代码根目录运行安装，将本地代码包进行安装，安装完成之后可以运行命令行
 ```shell
+# install poetry
+curl -sSL https://install.python-poetry.org | python3 -
+
 # 进行安装
-pip install -e .
+poetry install
 
 # 执行命令
-cobo
+poetry run cobo
 
 # 执行子命令(config)，配置参数(number=100)
-cobo --enable-debug config set number 100
-```
-
-### 方式二 使用 python 命令直接运行
-首先配置 PYTHONPATH，package 目录即为代码根目录（也就是 setup.py 所在目录）
-
-```shell
-# 配置路径
-export PYTHONPATH=$PYTHONPATH:/path/to/your/package
-
-# 执行命令
-python -m cobo_cli.commands
-
-# 执行子命令(config)，配置参数(number=100)
-python -m cobo_cli.commands --enable-debug config set number 100
+poetry run cobo --enable-debug config set user_access_token 1234567890
 ```
 
 ## 代码开发指南
@@ -55,7 +43,7 @@ CommandContext 另一个参数为 env ，代表所想使用的环境（Dev, Prod
 
 ## 命令介绍
 
-命令执行前假设已经通过 `pip install -e .` 安装至当前虚拟python环境。
+命令执行前假设已经通过 `make install` 安装至当前虚拟python环境。
 
 在执行时可以在主命令后追加 `--enable-debug` 参数显示debug级别日志，
 
@@ -78,7 +66,7 @@ cobo config unset number
 生成 API/APP keypair，并存储到 .env 文件中
 
 ```text
-cobo keys generate --help
+poetry run cobo keys generate --help
 Usage: cobo keys generate [OPTIONS]
 
 Options:
@@ -91,17 +79,17 @@ Options:
 如果 .env 中已经存在对应的 API/APP 的 key，则需要添加 --force 选项才能进行生成
 
 ```shell
-cobo keys generate --key-type APP --alg ed25519
+poetry run cobo keys generate --key-type APP --alg ed25519
 ```
 
 ```shell
-cobo keys generate --key-type APP --alg ed25519 --force
+poetry run cobo keys generate --key-type APP --alg ed25519 --force
 ```
 
 #### login 命令
 
 ```text
-cobo login --help
+poetry run cobo login --help
 Usage: cobo login [OPTIONS] COMMAND [ARGS]...
 
 Options:
@@ -122,12 +110,12 @@ Options:
 
 1) 生成 APP_KEY/APP_SECRET，在 Cobo Portal 创建应用过程来配置 APP_KEY 
     ```shell
-    cobo keys generate --key-type APP --alg ed25519
+    poetry run cobo keys generate --key-type APP --alg ed25519
     ```
 
 2) 将从 Cobo Portal 中注册完应用获取到的 CLIENT_ID 保存到 .env 文件中
     ```shell
-    cobo config set CLIENT_ID aYkam0BPwJrduDU3Wqu89htGDHy4ATkV
+    poetry run cobo config set CLIENT_ID aYkam0BPwJrduDU3Wqu89htGDHy4ATkV
     ```
 
 3) Org 对 App 进行授权（Org 安装应用），并进行审核。此步骤需要进行授权的 Org(大概率不是开发者自己的Org) 在 Cobo Portal的后台中进行操作。
@@ -140,11 +128,11 @@ Options:
 
    - 获取 Access Token、Refresh Token，并存储
    ```shell
-    cobo --env sandbox login -o --org-uuid 02273047-5730-4b63-be0e-399e5d3a1054
+    poetry run cobo --env sandbox login -o --org-uuid 02273047-5730-4b63-be0e-399e5d3a1054
     ```
    - 刷新 Token，并存储
    ```shell
-    cobo --env sandbox login -o --org-uuid 02273047-5730-4b63-be0e-399e5d3a1054 --refresh-token
+    poetry run cobo --env sandbox login -o --org-uuid 02273047-5730-4b63-be0e-399e5d3a1054 --refresh-token
     ```
 
 ##### User Token
@@ -152,9 +140,9 @@ Options:
 使用 -u 参数进行用户身份级别的登录，登录完成后会获取到 USER ACCESS TOKEN 用于后续请求
 
 ```shell
-cobo --env sandbox login -u
+poetry run cobo --env sandbox login -u
 ```
 ```shell
-cobo --enable-debug --env sandbox login -u
+poetry run cobo --enable-debug --env sandbox login -u
 ```
 

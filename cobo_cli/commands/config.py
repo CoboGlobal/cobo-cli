@@ -1,3 +1,5 @@
+import os
+
 import click
 
 from cobo_cli.data.context import CommandContext
@@ -27,7 +29,9 @@ def set_config(ctx: click.Context, key: str, value: str):
     if config_manager.set_config(key, value):
         click.echo(f"Configuration '{key}' set to '{value}'")
     else:
-        click.echo(f"Failed to set configuration '{key}'. Make sure it's a valid configuration key.")
+        click.echo(
+            f"Failed to set configuration '{key}'. Make sure it's a valid configuration key."
+        )
 
 
 @config.command("get")
@@ -69,6 +73,16 @@ def delete_config(ctx: click.Context, key: str):
         click.echo(f"Configuration '{key}' deleted")
     else:
         click.echo(f"Configuration '{key}' not found or cannot be deleted")
+
+
+@config.command("show-path")
+@click.pass_context
+def show_config_path(ctx: click.Context):
+    """Show the configuration file path."""
+    command_context: CommandContext = ctx.obj
+    config_manager = command_context.config_manager
+    absolute_path = os.path.abspath(config_manager.config_file)
+    click.echo(f"Configuration file path: {absolute_path}")
 
 
 if __name__ == "__main__":

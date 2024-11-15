@@ -1,6 +1,8 @@
 import click
-from cobo_cli.data.context import CommandContext
+
 from cobo_cli.data.auth_methods import AuthMethodType
+from cobo_cli.data.context import CommandContext
+
 
 @click.command(
     "auth",
@@ -18,8 +20,11 @@ def auth(ctx: click.Context, method: str):
         config_manager.set_config("auth_method", method)
         click.echo(f"Default authentication method set to: {method}")
     else:
-        current_method = config_manager.get_config("auth_method", AuthMethodType.APIKEY.value)
+        current_method = config_manager.get_config(
+            "auth_method", AuthMethodType.APIKEY.value
+        )
         click.echo(f"Current default authentication method: {current_method}")
+
 
 if __name__ == "__main__":
     auth()

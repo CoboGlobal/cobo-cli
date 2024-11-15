@@ -9,7 +9,9 @@ def generate_ws_apikey_auth_headers(
     path,
 ):
     timestamp = str(int(time.time() * 1000))
-    digest = hashlib.sha256(hashlib.sha256(f"{path}|{timestamp}".encode()).digest()).digest()
+    digest = hashlib.sha256(
+        hashlib.sha256(f"{path}|{timestamp}".encode()).digest()
+    ).digest()
     sk = SigningKey(bytes.fromhex(api_secret))
     signature = sk.sign(digest).signature
     vk = bytes(sk.verify_key)
@@ -19,4 +21,3 @@ def generate_ws_apikey_auth_headers(
         "Biz-Api-Signature": signature.hex(),
     }
     return headers
-

@@ -7,7 +7,7 @@ import click
 from click.testing import CliRunner
 
 from cobo_cli.cli import cli
-from cobo_cli.managers.config_manager import ConfigManager
+from cobo_cli.utils.config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -19,20 +19,15 @@ class TestLoginCommands(unittest.TestCase):
     @patch.object(ConfigManager, "get_config")
     @patch.object(ConfigManager, "set_config")
     def test_login_org_token(self, set_config, get_config):
-        get_config.return_value = {
+        config = {
             "access_token": "sR2PzutxUwrMvbCoZf9uKq1uFQioFj5SU2us5g55aEh5PhwqVCMaE0fqRWK7xtN7",
             "token_type": "Bearer",
             "scope": "",
             "expires_in": 42810,
             "refresh_token": "agyn7yVtfyf3WkU1Vy3Kl2z4w5z422JHvG7dErixlCRhMTifrJs3CB8kTSWi7Rzv",
         }
-        set_config.return_value = {
-            "access_token": "sR2PzutxUwrMvbCoZf9uKq1uFQioFj5SU2us5g55aEh5PhwqVCMaE0fqRWK7xtN7",
-            "token_type": "Bearer",
-            "scope": "",
-            "expires_in": 42810,
-            "refresh_token": "agyn7yVtfyf3WkU1Vy3Kl2z4w5z422JHvG7dErixlCRhMTifrJs3CB8kTSWi7Rzv",
-        }
+        get_config.side_effect = lambda key: config.get(key)
+        set_config.side_effect = lambda key, value: config.update({key: value})
         runner = CliRunner()
 
         assert isinstance(cli, click.Group)
@@ -54,42 +49,30 @@ class TestLoginCommands(unittest.TestCase):
                 cli,
                 [
                     "--enable-debug",
-                    "--env-file",
+                    "--config-file",
                     env_file,
                     "--env",
                     "sandbox",
                     "login",
                     "-o",
-                    "--org-uuid",
-                    "02273047-5730-4b63-be0e-399e5d3a1054",
-                ],
-            )
-            logger.info(f"command result: {result.output}")
-            self.assertEqual(result.exit_code, 0)
-            self.assertTrue(
-                "Got token for org 02273047-5730-4b63-be0e-399e5d3a1054"
-                in result.output
-            )
-
-            result = runner.invoke(
-                cli,
-                [
-                    "--enable-debug",
-                    "--env-file",
-                    env_file,
-                    "--env",
-                    "sandbox",
-                    "login",
-                    "-o",
-                    "--org-uuid",
-                    "02273047-5730-4b63-be0e-399e5d3a1054",
                     "--refresh-token",
                 ],
             )
             logger.info(f"command result: {result.output}")
             self.assertEqual(result.exit_code, 0)
 
-            self.assertTrue(
-                "Got token for org 02273047-5730-4b63-be0e-399e5d3a1054"
-                in result.output
+            result = runner.invoke(
+                cli,
+                [
+                    "--enable-debug",
+                    "--config-file",
+                    env_file,
+                    "--env",
+                    "sandbox",
+                    "login",
+                    "-o",
+                    "--refresh-token",
+                ],
             )
+            logger.info(f"command result: {result.output}")
+            self.assertEqual(result.exit_code, 0)
