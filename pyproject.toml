@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cobo-cli"
-version = "0.0.3"
+version = "0.0.4"
 description = "Cobo Command-line Tool"
 authors = ["Cobo <support@cobo.com>"]
 license = "MIT"
