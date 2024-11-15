@@ -1,12 +1,9 @@
-import hashlib
 import json
 import threading
-import time
 
 import click
 import requests
 import websocket
-from nacl.signing import SigningKey
 
 from cobo_cli.data.context import CommandContext
 from cobo_cli.utils.api import load_api_spec, make_request
@@ -58,6 +55,8 @@ def trigger(ctx, event_type, override):
     if override:
         try:
             override_data = json.loads(override)
+            if type(override_data) in [int, str, float, bool]:
+                raise json.JSONDecodeError
             payload["override_data"] = override_data
         except json.JSONDecodeError:
             click.echo("Error: Invalid JSON in override data.")
@@ -69,7 +68,9 @@ def trigger(ctx, event_type, override):
         click.echo("Webhook event triggered successfully.")
         click.echo(json.dumps(response.json(), indent=2))
     else:
-        click.echo(f"Failed to trigger webhook event. Status code: {response.status_code}")
+        click.echo(
+            f"Failed to trigger webhook event. Status code: {response.status_code}"
+        )
         click.echo(response.text)
 
 

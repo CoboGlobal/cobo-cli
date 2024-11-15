@@ -1,83 +1,63 @@
-import json
 import os
-from dataclasses import dataclass, field
+from enum import Enum
 from typing import List, Optional
 
 import yaml
-from dataclasses_json import dataclass_json
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    HttpUrl,
+    field_validator,
+    model_validator,
+)
 
 from cobo_cli.data.environments import EnvironmentType
 from cobo_cli.data.frameworks import FrameworkEnum
-from cobo_cli.managers.config_manager import ConfigManager, default_manifest_file
+from cobo_cli.utils.config import default_manifest_file
 
 
-@dataclass_json
-@dataclass
-class Manifest:
-    app_name: Optional[str] = ""
+# Define the enum for grant_dimension
+class GrantDimensionEnum(str, Enum):
+    ORG = "org"
+    USER = "user"
+
+
+# Define the tuple separately
+class Manifest(BaseModel):
+    app_name: str = Field(..., min_length=1, max_length=30)
     app_id: Optional[str] = ""
     dev_app_id: Optional[str] = ""
     client_id: Optional[str] = ""
     dev_client_id: Optional[str] = ""
-    callback_urls: Optional[List[str]] = field(default_factory=lambda: [])
-    app_desc: Optional[str] = ""
-    app_icon_url: Optional[str] = ""
-    homepage_url: Optional[str] = ""
-    policy_url: Optional[str] = ""
-    client_key: Optional[str] = ""
-    app_desc_long: Optional[str] = ""
-    tags: Optional[List[str]] = field(default_factory=lambda: [])
-    screen_shots: Optional[List[str]] = field(default_factory=lambda: [])
-    creator_name: Optional[str] = ""
-    contact_email: Optional[str] = ""
-    support_site_url: Optional[str] = ""
-    permission_notice: Optional[str] = ""
-    required_permissions: Optional[List[str]] = field(default_factory=lambda: [])
-    optional_permissions: Optional[List[str]] = field(default_factory=lambda: [])
-    framework: Optional[str] = ""
+    callback_urls: List[HttpUrl] = Field(default_factory=list)
+    app_desc: str = Field(..., max_length=80)
+    app_icon_url: HttpUrl
+    homepage_url: HttpUrl
+    policy_url: Optional[HttpUrl] = None
+    app_key: str = Field(..., max_length=80, serialization_alias="client_key")
+    app_desc_long: str = Field(..., max_length=1000)
+    tags: List[str] = Field(default_factory=list)
+    screen_shots: List[HttpUrl] = Field(default_factory=list)
+    creator_name: str
+    contact_email: EmailStr
+    support_site_url: HttpUrl
+    permission_notice: Optional[str] = None
+    required_permissions: List[str] = Field(default_factory=list)
+    optional_permissions: List[str] = Field(default_factory=list)
+    framework: Optional[FrameworkEnum] = None
+    allow_multiple_tokens: Optional[bool] = False
+    grant_dimension: Optional[GrantDimensionEnum] = GrantDimensionEnum.ORG
 
-    @staticmethod
-    def load(file_path=default_manifest_file):
-        
-        if not os.path.exists(file_path):
-            return Manifest()  # 返回默认的 Manifest 实例
+    class Config:
+        extra = "forbid"
 
-        with open(file_path, "r", encoding="utf-8") as f:
-            try:
-                data = f.read().strip()  # 读取文件内容并去除两端空白字符
-                if not data:
-                    return Manifest()  # 返回默认的 Manifest 实例
-
-                if file_path.endswith(".json"):
-                    Manifest.check_json_types(data)
-                    return Manifest.from_json(data)
-                elif file_path.endswith(".yaml") or file_path.endswith(".yml"):
-                    return Manifest.from_dict(yaml.safe_load(data))
-                else:
-                    raise ValueError("Unsupported file format")
-            except json.JSONDecodeError:
-                raise ValueError("Invalid JSON file")
-            except yaml.YAMLError:
-                raise ValueError("Invalid YAML file")
-            except ValueError as e:
-                raise e
-
-    def save(self, file_path=default_manifest_file):
-        
-        with open(file_path, "w", encoding="utf-8") as f:
-            if file_path.endswith(".json"):
-                # 设置 ensure_ascii=False 来防止 unicode 转义
-                f.write(self.to_json(indent=4, ensure_ascii=False))
-            elif file_path.endswith(".yaml") or file_path.endswith(".yml"):
-                yaml.safe_dump(self.to_dict(), f, default_flow_style=False)
-            else:
-                raise ValueError("Unsupported file format")
-
-    def validate_required_fields(self, manifest_file: str, env: EnvironmentType = None):
+    @model_validator(mode="after")
+    def check_required_fields(self) -> "Manifest":
         required_fields = [
             "app_name",
             "callback_urls",
-            "client_key",
+            "app_key",
             "creator_name",
             "app_desc",
             "app_icon_url",
@@ -88,74 +68,98 @@ class Manifest:
             "app_desc_long",
             "required_permissions",
         ]
-        error_fields = []
-        for _field in required_fields:
-            _value = getattr(self, _field, None)
-            if not _value or len(_value) == 0:
-                error_fields.append(_field)
-        if len(error_fields) > 0:
+        missing_fields = [
+            field for field in required_fields if not getattr(self, field)
+        ]
+        if missing_fields:
             raise ValueError(
-                f"Required field{'' if len(error_fields) == 1 else 's'} {', '.join(error_fields)} not exist{'' if len(error_fields) == 1 else 's'} in {manifest_file}.",
+                f"Required field{'s' if len(missing_fields) > 1 else ''} "
+                f"{', '.join(missing_fields)} not provided."
             )
-        if env and env.value == EnvironmentType.PRODUCTION.value:
-            if not self.homepage_url.startswith("https://"):
-                raise ValueError("home_page_url should starts with https://")
-        elif (
-            not self.homepage_url.startswith("https://")
-            and not self.homepage_url.startswith("http://localhost")
-            and not self.homepage_url.startswith("http://127.0.0.1")
+        return self
+
+    @field_validator("homepage_url")
+    @classmethod
+    def validate_homepage_url(cls, value: HttpUrl, info):
+        # Check if context is provided
+        env = info.context.get("env") if info.context else None
+        if env == EnvironmentType.PRODUCTION and not str(value).startswith("https://"):
+            raise ValueError(
+                "homepage_url should start with https:// in production environment"
+            )
+        elif not (
+            str(value).startswith("https://")
+            or str(value).startswith("http://localhost")
+            or str(value).startswith("http://127.0.0.1")
         ):
             raise ValueError(
-                "home_page_url should starts with https:// or http://localhost or http://127.0.0.1"
+                "homepage_url should start with https:// or http://localhost or http://127.0.0.1"
             )
+        return value
 
-        length_errors = []
-        length_limits = {
-            "app_desc": 80,
-            "app_desc_long": 1000,
-        }
-        for field, max_length in length_limits.items():
-            _value = getattr(self, field, None)
-            if len(_value) > max_length:
-                length_errors.append(
-                    f"{field} exceeds max length of {max_length} characters"
+    @classmethod
+    def load(cls, file_path=default_manifest_file):
+        if not os.path.exists(file_path):
+            return cls()
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = f.read().strip()
+            if not data:
+                return cls()
+
+            if file_path.endswith((".yaml", ".yml")):
+                return cls.model_validate(yaml.safe_load(data))
+            elif file_path.endswith(".json"):
+                return cls.model_validate_json(data)
+            else:
+                raise ValueError("Unsupported file format")
+
+    def save(self, file_path=default_manifest_file):
+        with open(file_path, "w", encoding="utf-8") as f:
+            if file_path.endswith((".yaml", ".yml")):
+                # Use model_dump to get a dictionary and then dump to YAML
+                yaml.safe_dump(
+                    self.model_dump(exclude_unset=True), f, default_flow_style=False
                 )
-        if length_errors:
-            raise ValueError(
-                f"Field length error{'' if len(length_errors) == 1 else 's'}: {', '.join(length_errors)}."
-            )
-        framework_values = [f.value for f in FrameworkEnum]
-        if self.framework and self.framework not in framework_values:
-            raise ValueError(f"framework support {', '.join(framework_values)} for now")
+            elif file_path.endswith(".json"):
+                # Use model_dump_json for JSON serialization
+                f.write(self.model_dump_json(exclude_unset=True, indent=4))
+            else:
+                raise ValueError("Unsupported file format")
 
-    @staticmethod
-    def check_json_types(json_str):
-        check_fields = {
-            "app_name": str,
-            "callback_urls": list,
-            "app_desc": str,
-            "app_icon_url": str,
-            "homepage_url": str,
-            "policy_url": str,
-            "client_key": str,
-            "app_desc_long": str,
-            "tags": list,
-            "screen_shots": list,
-            "creator_name": str,
-            "contact_email": str,
-            "support_site_url": str,
-            "permission_notice": str,
-            "required_permissions": list,
-            "optional_permissions": list,
-            "framework": str,
-        }
-        json_data = json.loads(json_str)
-        for key, value in json_data.items():
-            if key not in check_fields:
-                continue
-            expected_type = check_fields[key]
+    @classmethod
+    def create_with_defaults(cls, file_path: str, user_data: dict = None):
+        user_data = user_data or {}
+        # Initialize with default values or user-provided values
+        manifest = cls(
+            app_name=user_data.get("app_name", "YourAppName"),
+            app_desc=user_data.get("app_desc", "Short description of your app"),
+            app_icon_url=user_data.get("app_icon_url", "https://example.com/icon.png"),
+            homepage_url=user_data.get("homepage_url", "https://example.com"),
+            app_key=user_data.get("app_key", "your-app-key"),
+            app_desc_long=user_data.get(
+                "app_desc_long", "A longer description of your app"
+            ),
+            creator_name=user_data.get("creator_name", "Your Name"),
+            contact_email=user_data.get("contact_email", "your-email@example.com"),
+            support_site_url=user_data.get(
+                "support_site_url", "https://example.com/support"
+            ),
+            callback_urls=user_data.get(
+                "callback_urls", ["https://example.com/callback"]
+            ),
+            screen_shots=user_data.get(
+                "screen_shots",
+                [
+                    "https://example.com/screenshot_1.png",
+                    "https://example.com/screenshot_2.png",
+                    "https://example.com/screenshot_3.png",
+                ],
+            ),
+            required_permissions=user_data.get(
+                "required_permissions", ["resource:action"]
+            ),
+        )
 
-            if not isinstance(value, expected_type):
-                raise ValueError(
-                    f"Field '{key}' should be {expected_type.__name__}, but got {type(value).__name__}"
-                )
+        # Use the save method to write the manifest to a file
+        manifest.save(file_path)

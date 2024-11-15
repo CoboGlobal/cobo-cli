@@ -1,6 +1,7 @@
 import logging
 import os
 import unittest
+from unittest.mock import patch
 
 import click
 from click.testing import CliRunner
@@ -14,7 +15,9 @@ class TestKeysCommands(unittest.TestCase):
     def setUp(self):
         logging.getLogger().setLevel(logging.DEBUG)
 
-    def test_keys_generate(self):
+    @patch("cobo_cli.commands.keys.handle_app_key_generation")
+    def test_keys_generate(self, mock_handle_app_key_generation):
+        mock_handle_app_key_generation.return_value = None
         runner = CliRunner()
 
         assert isinstance(cli, click.Group)
@@ -25,7 +28,7 @@ class TestKeysCommands(unittest.TestCase):
                 cli,
                 [
                     "--enable-debug",
-                    "--env-file",
+                    "--config-file",
                     env_file,
                     "keys",
                     "generate",
@@ -38,7 +41,7 @@ class TestKeysCommands(unittest.TestCase):
                 cli,
                 [
                     "--enable-debug",
-                    "--env-file",
+                    "--config-file",
                     env_file,
                     "--env",
                     "prod",

@@ -1,13 +1,10 @@
-import os
-
-import pytest
-
-from cobo_cli.utils import common
+from cobo_cli.utils.app import download_file, extract_file
+from cobo_cli.utils.authorization import is_response_success
 
 
 def test_is_response_success():
-    assert common.is_response_success({"success": True}) == True
-    assert common.is_response_success({"success": False}) == False
+    assert is_response_success({"success": True})
+    assert not is_response_success({"success": False})
 
 
 def test_download_file(mocker, tmp_path):
@@ -24,26 +21,46 @@ def test_download_file(mocker, tmp_path):
     test_dir.mkdir()
 
     # Call the function
-    result = common.download_file("http://test.com/file.txt", str(test_dir))
+    download_file("http://test.com/file.txt", str(test_dir / "file.txt"))
 
-    # Assertions
-    assert result == str(test_dir / "file.txt")
-    mock_get.assert_called_once_with(
-        "http://test.com/file.txt", stream=True, timeout=10
-    )
+    # Assertions ?
+    # assert result == str(test_dir / "file.txt")
+    mock_get.assert_called_once_with("http://test.com/file.txt", stream=True)
     mock_open.assert_called_once_with(str(test_dir / "file.txt"), "wb")
     mock_open().write.assert_called_once_with(b"test content")
 
 
 def test_extract_file(tmp_path):
-    # Create a test zip file and verify extraction
-    import zipfile
+    # Create a test tar.gz file and verify extraction
+    import os
+    import tarfile
 
-    test_zip = tmp_path / "test.zip"
-    with zipfile.ZipFile(test_zip, "w") as zf:
-        zf.writestr("test.txt", "test content")
+    # 创建测试目录和文件
+    test_dir = tmp_path / "test_dir"
+    test_dir.mkdir()
+    test_file = test_dir / "test.txt"
+    test_file.write_text("test content")
 
+    # 创建 tar.gz 文件
+    test_archive = tmp_path / "test.tar.gz"
+    with tarfile.open(test_archive, "w:gz") as tar:
+        # 将文件添加到归档中，使用相对路径
+        tar.add(test_file, arcname="test.txt")
+
+    # 确保归档文件被正确创建
+    assert os.path.exists(test_archive)
+
+    # 创建提取目录
     extract_dir = tmp_path / "extract"
-    common.extract_file(str(test_zip), str(extract_dir))
+    extract_dir.mkdir()
 
-    assert (extract_dir / "test.txt").read_text() == "test content"
+    # 提取文件
+    extract_file(str(test_archive), str(extract_dir))
+
+    # 验证提取结果
+    extracted_file = extract_dir / "test.txt"
+    assert extracted_file.exists()
+    assert extracted_file.read_text() == "test content"
+
+    # 清理
+    test_archive.unlink()

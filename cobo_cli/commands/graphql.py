@@ -1,7 +1,9 @@
-import click
 import json
-from cobo_cli.data.context import CommandContext
+
+import click
+
 from cobo_cli.utils.api import make_request
+
 
 @click.command(
     "graphql",
@@ -9,14 +11,22 @@ from cobo_cli.utils.api import make_request
     help="Execute a GraphQL query against the Cobo API.",
 )
 @click.option(
-    "-q", "--query",
+    "-q",
+    "--query",
     help="The GraphQL query string.",
-    required=True,
+    required=False,
 )
 @click.option(
-    "-v", "--variables",
+    "-v",
+    "--variables",
     help="JSON string of variables for the GraphQL query.",
     default="{}",
+)
+@click.option(
+    "-f",
+    "--file",
+    help="The GraphQL query file.",
+    required=False,
 )
 @click.option(
     "--raw",
@@ -24,18 +34,23 @@ from cobo_cli.utils.api import make_request
     help="Output the raw JSON response.",
 )
 @click.pass_context
-def graphql(ctx: click.Context, query: str, variables: str, raw: bool):
+def graphql(ctx: click.Context, query: str, variables: str, file: str, raw: bool):
     """Execute a GraphQL query against the Cobo API."""
-    command_context: CommandContext = ctx.obj
-    env = command_context.env
+    if query is None and file is None:
+        raise click.MissingParameter("Missing argument 'query' or 'file'.")
+    if not query:
+        with open(file, "r") as f:
+            query = f.read()
 
     try:
         # Parse the query input as JSON
         query_data = json.loads(query)
-        if isinstance(query_data, dict) and 'query' in query_data:
-            query = query_data['query']
+        if isinstance(query_data, dict) and "query" in query_data:
+            query = query_data["query"]
         else:
-            raise click.BadParameter("Query must be a valid JSON string containing a 'query' key.")
+            raise click.BadParameter(
+                "Query must be a valid JSON string containing a 'query' key."
+            )
     except json.JSONDecodeError:
         # If it's not valid JSON, assume it's a raw GraphQL query string
         pass
@@ -45,12 +60,9 @@ def graphql(ctx: click.Context, query: str, variables: str, raw: bool):
     except json.JSONDecodeError:
         raise click.BadParameter("Variables must be a valid JSON string.")
 
-    payload = {
-        "query": query,
-        "variables": variables_dict
-    }
+    payload = {"query": query, "variables": variables_dict}
 
-    response = make_request(ctx, "POST", "/web/graphql", json=payload)
+    response = make_request(ctx, "POST", "/graphql", prefix="/web", json=payload)
 
     if raw:
         click.echo(response.text)
@@ -60,6 +72,7 @@ def graphql(ctx: click.Context, query: str, variables: str, raw: bool):
             click.echo_via_pager(formatted_response)
         except json.JSONDecodeError:
             click.echo(response.text)
+
 
 if __name__ == "__main__":
     graphql()

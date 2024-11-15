@@ -1,7 +1,9 @@
 from dataclasses import dataclass
-from cobo_cli.managers import ConfigManager
-from cobo_cli.data.environments import EnvironmentType
+
 from cobo_cli.data.auth_methods import AuthMethodType
+from cobo_cli.data.environments import EnvironmentType
+from cobo_cli.utils.config import ConfigManager
+
 
 @dataclass
 class CommandContext:
