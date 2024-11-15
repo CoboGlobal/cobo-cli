@@ -21,32 +21,31 @@ class TestAppsCommands(unittest.TestCase):
         # Setup test manifest data
 
         self.manifest_data = {
-            "app_name": "jw-test-permission-test",
-            "app_id": None,
+            "app_name": "test-permission-test",
+            "app_id": "",
             "dev_app_id": "",
-            "callback_urls": ["https://superloop.cobo.com/index"],
+            "callback_urls": ["https://callback.cobo.com/index"],
             "app_desc": "trade on exchanges without worrying about counterparty risks.",
-            "app_icon_url": "https://d.cobo.com/public/logos/Icon_SuperLoop.svg",
-            "homepage_url": "http://127.0.0.1",
-            "policy_url": "https://superloop.cobo.com/privacy",
+            "app_icon_url": "https://icon.cobo.com/test.svg",
+            "homepage_url": "http://127.0.0.1:5000",
+            "policy_url": "https://policy.cobo.com",
             "app_key": "1234567890123456789012345678901234567890123456789012345678901234",
-            "app_desc_long": "modify-long description",
-            "tags": ["modify-Cobo"],
+            "app_desc_long": "app-description-long",
+            "tags": ["Cobo"],
             "screen_shots": [
-                "https://d.cobo.com/apk/android/SuperLoop.png",
-                "https://d.cobo.com/apk/android/Loop.png",
-                "https://d.cobo.com/apk/android/MirrorModal.png",
+                "https://icon.cobo.com/screen1.svg",
+                "https://icon.cobo.com/screen2.svg",
+                "https://icon.cobo.com/screen3.svg",
             ],
-            "creator_name": "modify-Cobo",
-            "contact_email": "jingwen.wang+portal1modify@cobo.com",
-            "support_site_url": "https://superloop.cobo.com/support",
-            "permission_notice": "modify-Once installed, Superloop will be permitted access to your Cobo data as described below.",
+            "creator_name": "Cobo",
+            "contact_email": "developer@cobo.com",
+            "support_site_url": "https://cobo.com/support",
+            "permission_notice": "Once installed, this app will be permitted access to your Cobo data as described below.",
             "required_permissions": [
                 "mpc_organization_controlled_wallet:stake",
                 "custodial_asset_wallet:withdraw",
             ],
             "optional_permissions": ["custodial_asset_wallet:withdraw"],
-            "framework": "fastapi",
         }
 
     def setup_test_environment(self, **kwargs):
@@ -62,7 +61,7 @@ class TestAppsCommands(unittest.TestCase):
 
         return env_file
 
-    @patch("cobo_cli.commands.app.make_request")
+    @patch("cobo_cli.utils.api.make_request")
     @patch("cobo_cli.utils.config.ConfigManager.get_config")
     def test_app_upload(self, mock_get_config, mock_make_request):
         """Test the app upload command"""
@@ -104,7 +103,7 @@ class TestAppsCommands(unittest.TestCase):
                 "Expected upload success message not found in output",
             )
 
-    @patch("cobo_cli.commands.app.make_request")
+    @patch("cobo_cli.utils.api.make_request")
     def test_app_update(self, mock_make_request):
         """Test the app update command"""
         mock_make_request.return_value.status_code = 200
@@ -137,7 +136,7 @@ class TestAppsCommands(unittest.TestCase):
                 "Expected update success message not found in output",
             )
 
-    @patch("cobo_cli.commands.app.make_request")
+    @patch("cobo_cli.utils.api.make_request")
     def test_app_status(self, mock_make_request):
         """Test the app status command"""
         mock_make_request.return_value.status_code = 200

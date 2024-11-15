@@ -22,8 +22,6 @@ from cobo_cli.data.context import CommandContext
             "exchange",
             "developer",
             "apps",
-            "settings",
-            "guides",
             "pricing",
             "approval",
         ]
@@ -45,7 +43,7 @@ def open(ctx: click.Context, target: str):
         "exchange": "wallets/management/exchanges",
         "tx": "wallets/transaction",
         "rc": "wallets/riskControl",
-        "address": "/wallets/addressBook",
+        "address": "wallets/addressBook",
         "developer": "developers",
         "apps": "apps",
         "org": "org",
@@ -54,9 +52,8 @@ def open(ctx: click.Context, target: str):
         "roles": "org/roles",
         "governance": "org/policies",
         "activities": "org/activities",
-        "guides": "guides",
-        "pricing": "pricing",
-        "approval": "approval",
+        "pricing": "payment/pricingPlans",
+        "approval": "notifications/approvals/pending-my-approval",
     }
 
     if target in url_mapping:

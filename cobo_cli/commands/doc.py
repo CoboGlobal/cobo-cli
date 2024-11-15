@@ -23,15 +23,13 @@ def doc(ctx: click.Context, topic_or_path: str, update: bool):
         update_spec()
         return
 
-    base_url = "https://docs.cobo.com/"
+    base_url = "https://www.cobo.com/developers/v2/"
 
     url_mapping = {
-        "general": "",
-        "api": "api/",
-        "sdk": "sdk/",
-        "integration": "integration/",
-        "security": "security/",
-        "faq": "faq/",
+        "guides": "/guides",
+        "api": "/api-references/playground",
+        "sdk": "/developer-tools/quickstart-python",
+        "app": "/apps/introduction",
     }
 
     if topic_or_path.startswith("/"):
