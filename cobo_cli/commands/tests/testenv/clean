@@ -1,0 +1,8 @@
+#!/bin/bash
+
+SCRIPT=$(readlink -f "$0")
+BASEDIR=$(dirname "$SCRIPT")
+
+cd $(dirname $BASEDIR)
+rm -rf allure-results coverage.xml
+
