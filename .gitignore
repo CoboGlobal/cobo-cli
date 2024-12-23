@@ -45,3 +45,4 @@ docker/custody/logs/*
 dist/
 cobo.egg-info/
 build/
+manifest.json

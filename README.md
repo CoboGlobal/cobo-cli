@@ -1,6 +1,6 @@
 # Cobo CLI
 
-Cobo CLI is a command-line interface for managing Cobo applications and configurations.
+Cobo Command Line Interface (CLI) is a powerful developer tool designed to help you build, test, and manage your integration with [Cobo Wallet-as-a-Service (WaaS) 2.0](https://www.cobo.com/developers/v2/guides/overview/introduction) directly from the command line.
 
 ## Table of Contents
 
@@ -28,17 +28,17 @@ brew install cobo-cli
 
 ## Usage
 
-To use the Cobo CLI, run the following command in your terminal:
+To use Cobo CLI, run the following command in your terminal:
 
 ```bash
 cobo [OPTIONS] COMMAND [ARGS]...
 ```
 
-Check full doc [here](https://www.cobo.com/developers/v2/developer-tools/cobo-cli/introduction)
+Check full documentation [here](https://www.cobo.com/developers/v2/developer-tools/cobo-cli/introduction).
 
 ### Global Options
 
-- `-e, --env [sandbox|dev|prod]`: Override the environment for this command.
+- `-e, --env [dev|prod]`: Override the environment for this command.
 - `-a, --auth [apikey|user|org]`: Override the authentication method for this command.
 - `--enable-debug`: Enable debug mode for verbose logging.
 - `--config-file FILEPATH`: Specify the path to the config file.
@@ -51,7 +51,7 @@ Check full doc [here](https://www.cobo.com/developers/v2/developer-tools/cobo-cl
 
 - **app**: Manage Cobo applications.
   - `init`: Create a new Cobo application project.
-  - `run`: Run a Cobo application(not supported yet.).
+  - `run`: Run a Cobo application.
   - `upload`: Upload a Cobo application.
   - `update`: Update an existing Cobo application.
   - `status`: Check the status of a Cobo application.
@@ -112,7 +112,9 @@ Check full doc [here](https://www.cobo.com/developers/v2/developer-tools/cobo-cl
 - **version**: Display the current version of the Cobo CLI tool.
 
 ## Development
-[Install poetry first](https://python-poetry.org/docs/#installation)
+
+You can build your custom Cobo CLI based on the [Cobo CLI](https://github.com/CoboGlobal/cobo-cli) project.
+You need to install [Poetry](https://python-poetry.org/docs/#installation) first.
 
 To set up the development environment, install the development dependencies:
 
