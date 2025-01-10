@@ -1,11 +1,18 @@
-[tool.poetry]
+[project]
 name = "cobo-cli"
 version = "0.0.5"
 description = "Cobo Command-line Tool"
-authors = ["Cobo <support@cobo.com>"]
+authors = [
+    { "name" = "Cobo", "email" = "<support@cobo.com>" },
+]
 license = "MIT"
 readme = "README.md"
 packages = [{ include = "cobo_cli" }]
+
+[project.urls]
+Homepage = "https://github.com/CoboGlobal/cobo-cli"
+Repository = "https://github.com/CoboGlobal/cobo-cli.git"
+Documentation = "https://www.cobo.com/developers/v2/guides/overview/introduction"
 
 [tool.poetry.dependencies]
 python = "^3.9"
