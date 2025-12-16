@@ -76,7 +76,7 @@ def perform_org_logout(ctx):
         for key, value in env_vars.items():
             if key.startswith("ORG_TOKEN_"):
                 next_org_uuid = key[len("ORG_TOKEN_") :]
-                set_key(".env", "CURRENT_ORG_UUID", next_org_uuid)
+                set_key(".env", "CURRENT_ORG_UUID", next_org_uuid, quote_mode="never")
                 click.echo(f"Switched to organization: {next_org_uuid}")
                 return
         unset_key(".env", "CURRENT_ORG_UUID")

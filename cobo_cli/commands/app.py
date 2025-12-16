@@ -5,16 +5,16 @@ import sys
 import tempfile
 from functools import partial
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import click
 from click import BadParameter, ParamType
-from dotenv import get_key, set_key
 
 from cobo_cli.data.auth_methods import AuthMethodType
+from cobo_cli.data.constants import convert_wallet_type, supported_wallet_type_choices
 from cobo_cli.data.context import CommandContext
 from cobo_cli.data.environments import EnvironmentType
-from cobo_cli.data.manifest import Manifest
+from cobo_cli.data.manifest import Manifest, available_wallet_types
 from cobo_cli.utils.api import make_request
 from cobo_cli.utils.app import create_sub_project, validate_manifest_and_get_app_id
 from cobo_cli.utils.code_gen import ProcessContext, TemplateCodeGen
@@ -43,20 +43,11 @@ def app(ctx: click.Context):
 @click.option(
     "--auth",
     type=click.Choice(["apikey", "org", "user"]),
-    help="Authentication mechanism for Cobo's WaaS",
+    help="Authentication mechanism for Cobo's WaaS service",
 )
 @click.option(
     "--wallet-type",
-    type=click.Choice(
-        [
-            "custodial-asset",
-            "custodial-web3",
-            "mpc-org-controlled",
-            "mpc-user-controlled",
-            "smart-contract",
-            "exchange",
-        ]
-    ),
+    type=click.Choice(supported_wallet_type_choices),
     help="Wallet type to include",
 )
 @click.option(
@@ -117,25 +108,34 @@ def init_app(
         type: Optional[Union[ParamType, Any]] = None,
         default: Optional[Any] = None,
         available_types: Optional[Union[ParamType, Any]] = None,
+        validate_func: Optional[Callable] = None,
+        error_msg_func: Optional[Callable] = None,
     ) -> str:
-        def _validate_options(types: List[str], _value: str):
-            if _value not in types:
+        def _validate_options(_validate_func: Callable, _value: str):
+            if not _validate_func(_value):
                 click.echo(
-                    f"We don't support {_value} for now, please wait for future release version."
+                    error_msg_func(_value)
+                    if error_msg_func
+                    else f"We don't support {_value} for now, please wait for future release version."
                 )
                 _value = click.prompt(
                     text,
                     type=type,
                     default=default,
-                    value_proc=partial(_validate_options, available_types),
+                    value_proc=partial(_validate_options, _validate_func),
                 )
             return _value
+
+        def _default_validate_func(_value: str):
+            return _value in available_types
 
         value = click.prompt(
             text,
             type=type,
             default=default,
-            value_proc=partial(_validate_options, available_types),
+            value_proc=partial(
+                _validate_options, validate_func or _default_validate_func
+            ),
         )
         return value
 
@@ -155,17 +155,9 @@ def init_app(
         )
 
     if not wallet_type:
-        wallet_choices = [
-            "custodial-asset",
-            "custodial-web3",
-            "mpc-org-controlled",
-            "mpc-user-controlled",
-            "smart-contract",
-            "exchange",
-        ]
         wallet_type = click.prompt(
-            "What Wallet Technology do you want to use?",
-            type=click.Choice(wallet_choices, case_sensitive=False),
+            "What wallet type do you want to choose?",
+            type=click.Choice(supported_wallet_type_choices, case_sensitive=False),
         )
 
     if app_type == "mobile" and not mobile:
@@ -222,6 +214,7 @@ def init_app(
             f"Directory {project_dir} already exists. To overwrite it, use the --force option."
         )
     os.makedirs(project_dir, exist_ok=True)
+    wallet_type = convert_wallet_type(wallet_type)
 
     # Initialize project structure based on type
     if app_type == "mobile":
@@ -246,7 +239,7 @@ def init_app(
             app_icon_url = click.prompt(
                 "App Icon URL", default="https://example.com/icon.png"
             )
-            homepage_url = click.prompt("Homepage URL", default="https://example.com")
+            homepage_url = click.prompt("Homepage URL", default="http://localhost:5000")
             app_key = click.prompt("App Key", default="your-app-key")
             app_desc_long = click.prompt(
                 "Long Description", default="A longer description of your app"
@@ -267,10 +260,50 @@ def init_app(
                 default="https://example.com/screenshot_1.png,https://example.com/screenshot_2.png,"
                 "https://example.com/screenshot_3.png",
             ).split(",")
+
+            def _validate_wallet_type(_wallet_types: str):
+                _wallet_types = [item for item in _wallet_types.split(",") if item]
+                return all(
+                    [item.strip() in available_wallet_types for item in _wallet_types]
+                )
+
+            def _error_msg_func(_user_input):
+                _wallet_types = _user_input.split(",")
+                _invalid_wallet_type = [
+                    item
+                    for item in _wallet_types
+                    if item.strip() not in available_wallet_types
+                ]
+                return (
+                    f"We don't support {_invalid_wallet_type} for now, "
+                    f"supported wallet types are {available_wallet_types}."
+                )
+
+            wallet_types = prompt(
+                "Supported Wallet types (comma-separated). Leave it blank to support all wallet types.",
+                type=str,
+                default="",
+                available_types=available_wallet_types,
+                validate_func=_validate_wallet_type,
+                error_msg_func=_error_msg_func,
+            )
+
+            is_policy_reminded = click.prompt(
+                "Notice user to set up transaction policies?(default true)",
+                type=bool,
+                default=True,
+            )
+
             required_permissions = click.prompt(
                 "Required Permissions (semicolon-separated)",
-                default="mpc_organization_controlled_wallet:stake,custodial_asset_wallet:withdraw",
+                default="resource:action",
             ).split(",")
+
+            operation_approval_rules = click.prompt(
+                "Operation approval rules",
+                type=list[dict],
+                default=[],
+            )
 
             manifest_data = {
                 "app_name": app_name,
@@ -284,7 +317,14 @@ def init_app(
                 "support_site_url": support_site_url,
                 "callback_urls": callback_urls,
                 "screen_shots": screen_shots,
+                "wallet_types": (
+                    [item.strip() for item in wallet_types.split(",")]
+                    if wallet_types
+                    else []
+                ),
+                "is_policy_reminded": is_policy_reminded,
                 "required_permissions": required_permissions,
+                "operation_approval_rules": operation_approval_rules,
             }
             Manifest.create_with_defaults(manifest_file_path, manifest_data)
         else:
@@ -304,7 +344,7 @@ def init_app(
 
 @app.command(
     "run",
-    help="Run a Cobo application(We don't support 'cobo app run' command for now).",
+    help="Run a Cobo application.",
 )
 @click.option(
     "-p",
@@ -321,190 +361,39 @@ def init_app(
     default=False,
     help="Load the current app from portal via iframe",
 )
-@click.option(
-    "--manifest-path",
-    type=click.Path(file_okay=True),
-    required=False,
-    help="Manifest file to load",
-)
 @click.pass_context
-def run_app(ctx: click.Context, port: int, iframe: bool, manifest_path: click.Path):
+def run_app(ctx: click.Context, port: int, iframe: bool):
     """Run a Cobo application."""
-    click.echo("Not supported yet.Will support in future versions.")
-    return
-
-    def detect_framework():
-        if is_fastapi():
-            click.echo("FastAPI application detected.")
-            return "fastapi"
-        elif is_react():
-            click.echo("React application detected.")
-            return "react"
-        raise click.ClickException(
-            "Unsupported framework detected. Please select a supported framework."
-        )
-
-    def is_fastapi():
-        """Check if the application is FastAPI by file structure."""
-        return any(
-            os.path.isfile(path) and "fastapi" in open(path).read()
-            for path in ["main.py", "app/main.py"]
-        )
-
-    def is_react():
-        return os.path.isfile("package.json") and "react" in open("package.json").read()
-
-    def fastapi_setup(_config_manager, _env_type):
-        api_key = _config_manager.get_config("api_key")
-        api_secret = _config_manager.get_config("api_secret")
-        if not api_key or not api_secret:
-            raise click.ClickException(
-                f"API key and secret required for {_env_type}. Generate with 'cobo keys generate --key-type API'"
-            )
-        set_key(".env", "COBO_API_KEY", api_key)
-        set_key(".env", "COBO_API_SECRET", api_secret)
-        set_key(".env", "COBO_ENV", _env_type)
-
-    def react_setup(_ctx, _command_context, _manifest_path) -> str:
-        manifest = load_manifest(_ctx, _manifest_path)
-        _app_uuid = manifest.dev_app_id or _ctx.obj.env.default_app_id
-        if not manifest.app_key or manifest.app_key == "your-app-key":
-            raise BadParameter(
-                "The app_key is missing in manifest file. "
-                "Please generate a new key with 'cobo keys generate --key-type APP'"
-            )
-
-        set_key(".env", "REACT_APP_PUBLIC_KEY", manifest.app_key)
-        set_key(".env", "REACT_APP_APPID", _app_uuid)
-        env_app_secret = get_key(".env", "APP_SECRET") or get_key(
-            ".env", "REACT_APP_PUBLIC_SECRET"
-        )
-        if not env_app_secret or env_app_secret == "your-app-secret":
-            click.echo(
-                "APP_SECRET not found in .env file. Please fill the REACT_APP_PUBLIC_SECRET field manually."
-            )
-        set_key(".env", "REACT_APP_PUBLIC_SECRET", env_app_secret or "your-app-secret")
-        return _app_uuid
-
-    def load_manifest(_ctx, _manifest_path):
-        path = resolve_manifest_path(_manifest_path)
-        if not path:
-            raise BadParameter(
-                "Manifest file not found. Please create or specify the correct path",
-                ctx=ctx,
-            )
-        try:
-            return Manifest.load(path)
-        except ValueError as e:
-            raise BadParameter(str(e), ctx=_ctx)
-
-    def resolve_manifest_path(_manifest_path):
-        if _manifest_path and os.path.isfile(_manifest_path.resolve_path):
-            return _manifest_path.resolve_path
-        for default_path in [
-            f"./{default_manifest_file}",
-            f"../{default_manifest_file}",
-        ]:
-            if os.path.isfile(default_path):
-                return default_path
-        return None
-
-    def open_app_in_browser(_app_uuid, _command_context):
-        url = f"{_command_context.config_manager.get_config('base_url').rstrip('/')}/apps/myApps/allApps/{_app_uuid}"
-        click.echo(f"Open {url} in browser")
-        click.launch(url)
-
-    def process_app(_framework, _port):
-        run_command = get_run_command(_framework)
-        click.echo(f"Starting application on port {_port}...")
-        subprocess.run([*run_command.split(), "--port", str(_port)], check=True)
-
-    def get_run_command(_framework):
-        click.echo("Detecting application type...")
-        if os.path.isfile("start.sh"):
-            return "sh start.sh"
-        elif _framework == "fastapi":
-            return get_fastapi_run_command()
-        elif _framework == "react":
-            install_npm_dependencies()
-            return "npm run start"
-        else:
-            raise BadParameter(
-                "Unsupported application type. Only 'fastapi' and 'react' are supported."
-            )
-
-    def get_fastapi_run_command():
-        """Prepare the command for running FastAPI with Uvicorn, using the current virtual environment if available."""
-        main_py_path = find_main_py_path()
-        if not is_in_virtualenv():
-            setup_virtual_environment()
-        else:
-            if click.confirm(
-                "Would you like to use current virtual environment to install dependencies?"
-            ):
-                click.echo("Using the current virtual environment.")
-                install_dependencies(sys.executable)
-            else:
-                setup_virtual_environment()
-        os.chdir(main_py_path)
-        return f"{sys.executable} -m uvicorn main:app --reload"
-
-    def find_main_py_path():
-        """Identify and return the directory containing main.py for FastAPI."""
-        for path in ["./", "./app"]:
-            if os.path.isfile(os.path.join(path, "main.py")):
-                return path
-        raise FileNotFoundError(
-            "main.py not found. Ensure that FastAPI's entry point is main.py or adjust the script accordingly."
-        )
-
-    def is_in_virtualenv():
-        """Check if the current environment is a virtual environment."""
-        return hasattr(sys, "real_prefix") or (
-            hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
-        )
-
-    def setup_virtual_environment():
-        """Create a virtual environment only if one is not already active, and install dependencies."""
-        if not os.path.exists("venv"):
-            click.echo("Creating virtual environment...")
-            subprocess.run(["python", "-m", "venv", "venv"], check=True)
-            venv_python = os.path.join("venv", "bin", "python")
-            install_dependencies(venv_python)
-        else:
-            install_dependencies(sys.executable)
-
-    def install_dependencies(python_executable):
-        """Install dependencies using the specified Python executable."""
-        click.echo("Installing dependencies...")
-        subprocess.run(
-            [python_executable, "-m", "pip", "install", "-r", "requirements.txt"],
-            check=True,
-        )
-
-    def install_npm_dependencies():
-        click.echo("Installing npm dependencies...")
-        subprocess.run(["npm", "install"], check=True)
 
     command_context: CommandContext = ctx.obj
     config_manager = command_context.config_manager
-    env_type = config_manager.get_config("environment")
-
+    env_type = command_context.env.value
     if env_type not in ["dev", "sandbox"]:
         raise BadParameter("Environment should be 'sandbox' or 'dev' to run the app")
-    framework = detect_framework()
-    if framework == "fastapi":
-        fastapi_setup(config_manager, env_type)
-        process_app(framework, port)
 
-    if framework == "react" and iframe:
-        app_uuid = react_setup(ctx, command_context, manifest_path)
-        open_app_in_browser(app_uuid, command_context)
-        os.environ["BROWSER"] = "none"
-        process_app(framework, port)
-    elif framework == "react":
-        os.environ["BROWSER"] = "1"
-        process_app(framework, port)
+    def process_app(_port):
+        run_command = get_run_command()
+        click.echo(f"Starting application on port {_port}...")
+        commands = [*run_command.split(), "--port", f"{_port}", "--env", env_type]
+        if iframe:
+            manifest, _ = Manifest.load()
+            app_uuid = manifest.dev_app_id if manifest else None
+            app_uuid = app_uuid or command_context.env.default_app_id
+            if app_uuid:
+                url = f"{config_manager.get_config('base_url').rstrip('/')}/apps/myApps/allApps/{app_uuid}"
+                commands.append("--url")
+                commands.append(url)
+        subprocess.run(commands, check=True)
+
+    def get_run_command():
+        if os.path.isfile("start.sh"):
+            return "bash start.sh"
+        if os.path.isfile("scripts/start.sh"):
+            return "bash scripts/start.sh"
+        else:
+            raise BadParameter("No start.sh script found.")
+
+    process_app(port)
 
 
 @app.command("upload", help="Upload a Cobo application.")
@@ -551,7 +440,7 @@ def upload_app(ctx: click.Context) -> None:
 
     if not user_token:
         raise click.ClickException(
-            "User is not logged in. Please login first using 'cobo login -u' command."
+            "User is not logged in. Please log in first using 'cobo login -u' command."
         )
 
     try:
@@ -626,6 +515,28 @@ def update_app(ctx: click.Context) -> None:
         raise click.ClickException(str(e))
 
 
+@app.command("manifest", help="Get value from manifest file.")
+@click.option(
+    "-k",
+    "--key",
+    type=str,
+    help="Specify the key to retrieve from manifest.json. If not provided, the manifest file path is shown.",
+)
+@click.pass_context
+def get_manifest(ctx: click.Context, key: str = None) -> None:
+    try:
+        manifest, file_path = Manifest.load()
+    except ValueError as e:
+        raise BadParameter(str(e), ctx=ctx)
+    if not key:
+        click.echo(file_path)
+        return
+    value = getattr(manifest, key, "")
+    if not value:
+        raise BadParameter(f"No {key} field in Manifest.json.")
+    click.echo(value)
+
+
 @app.command("status", help="Check the status of a Cobo application.")
 @click.pass_context
 def app_status(ctx: click.Context) -> None:
@@ -673,16 +584,7 @@ def app_status(ctx: click.Context) -> None:
 )
 @click.option(
     "--wallet-type",
-    type=click.Choice(
-        [
-            "custodial-asset",
-            "custodial-web3",
-            "mpc-org-controlled",
-            "mpc-user-controlled",
-            "smart-contract",
-            "exchange",
-        ]
-    ),
+    type=click.Choice(supported_wallet_type_choices),
     required=True,
     help="Wallet type to include",
 )
@@ -696,7 +598,9 @@ def app_status(ctx: click.Context) -> None:
 def test_template(ctx, path, app_type, auth, wallet_type, code_gen_file):
     """Test Cobo templating functionality on a file or directory."""
     path = Path(path)
-    context = ProcessContext(app_type=app_type, wallet_type=wallet_type, auth=auth)
+    context = ProcessContext(
+        app_type=app_type, wallet_type=convert_wallet_type(wallet_type), auth=auth
+    )
     code_gen = TemplateCodeGen(code_gen_file)
 
     if path.is_file():

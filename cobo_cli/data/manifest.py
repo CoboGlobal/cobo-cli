@@ -23,6 +23,20 @@ class GrantDimensionEnum(str, Enum):
     USER = "user"
 
 
+available_wallet_types = [
+    "Custodial",
+    "MPC",
+    "SmartContract",
+    "Exchange",
+    "User-Controlled",
+    "Org-Controlled",
+    "Asset",
+    "Web3",
+    "Safe{Wallet}",
+    "Main",
+]
+
+
 # Define the tuple separately
 class Manifest(BaseModel):
     app_name: str = Field(..., min_length=1, max_length=30)
@@ -31,7 +45,7 @@ class Manifest(BaseModel):
     client_id: Optional[str] = ""
     dev_client_id: Optional[str] = ""
     callback_urls: List[HttpUrl] = Field(default_factory=list)
-    app_desc: str = Field(..., max_length=80)
+    app_desc: str = Field(..., max_length=200)
     app_icon_url: HttpUrl
     homepage_url: HttpUrl
     policy_url: Optional[HttpUrl] = None
@@ -43,11 +57,15 @@ class Manifest(BaseModel):
     contact_email: EmailStr
     support_site_url: HttpUrl
     permission_notice: Optional[str] = None
+    wallet_types: List[str] = Field(default_factory=list)
+    is_policy_reminded: Optional[bool] = True
     required_permissions: List[str] = Field(default_factory=list)
     optional_permissions: List[str] = Field(default_factory=list)
     framework: Optional[FrameworkEnum] = None
     allow_multiple_tokens: Optional[bool] = False
     grant_dimension: Optional[GrantDimensionEnum] = GrantDimensionEnum.ORG
+    operation_approval_rules: List[dict] = Field(default_factory=list)
+    app_roles: List[dict] = Field(default_factory=list)
 
     class Config:
         extra = "forbid"
@@ -78,6 +96,21 @@ class Manifest(BaseModel):
             )
         return self
 
+    @field_validator("wallet_types")
+    @classmethod
+    def validate_wallet_types(cls, wallet_types: List[str]):
+        _invalid_wallet_type = [
+            item for item in wallet_types if item.strip() not in available_wallet_types
+        ]
+        if len(_invalid_wallet_type) > 0:
+            raise ValueError(
+                (
+                    f"We don't support {_invalid_wallet_type} for now, "
+                    f"supported wallet types are {available_wallet_types}."
+                )
+            )
+        return wallet_types
+
     @field_validator("homepage_url")
     @classmethod
     def validate_homepage_url(cls, value: HttpUrl, info):
@@ -98,7 +131,26 @@ class Manifest(BaseModel):
         return value
 
     @classmethod
-    def load(cls, file_path=default_manifest_file):
+    def load(cls, file_path=None) -> tuple["Manifest" or None, str or None]:
+        manifest_path = None
+        if file_path:
+            manifest_path = manifest_path
+        else:
+            possible_manifest_location = [
+                f"../{default_manifest_file}",
+                f"./{default_manifest_file}",
+            ]
+            for _path in possible_manifest_location:
+                if os.path.isfile(_path):
+                    manifest_path = _path
+        if manifest_path:
+            manifest_path = os.path.abspath(manifest_path)
+        if not manifest_path or not os.path.isfile(manifest_path):
+            return None, None
+        return cls._load(manifest_path), manifest_path
+
+    @classmethod
+    def _load(cls, file_path=default_manifest_file):
         if not os.path.exists(file_path):
             return cls()
 
@@ -135,7 +187,7 @@ class Manifest(BaseModel):
             app_name=user_data.get("app_name", "YourAppName"),
             app_desc=user_data.get("app_desc", "Short description of your app"),
             app_icon_url=user_data.get("app_icon_url", "https://example.com/icon.png"),
-            homepage_url=user_data.get("homepage_url", "https://example.com"),
+            homepage_url=user_data.get("homepage_url", "http://localhost:5000"),
             app_key=user_data.get("app_key", "your-app-key"),
             app_desc_long=user_data.get(
                 "app_desc_long", "A longer description of your app"
@@ -156,9 +208,16 @@ class Manifest(BaseModel):
                     "https://example.com/screenshot_3.png",
                 ],
             ),
+            wallet_types=user_data.get("wallet_types", []),
+            is_policy_reminded=user_data.get("is_policy_reminded", True),
+            allow_multiple_tokens=user_data.get("allow_multiple_tokens", False),
+            grant_dimension=user_data.get(
+                "grant_dimension", GrantDimensionEnum.ORG.value
+            ),
             required_permissions=user_data.get(
                 "required_permissions", ["resource:action"]
             ),
+            operation_approval_rules=user_data.get("operation_approval_rules", []),
         )
 
         # Use the save method to write the manifest to a file

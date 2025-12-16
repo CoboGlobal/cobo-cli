@@ -69,11 +69,13 @@ class ConfigManager:
         except Exception as e:
             raise Exception(f"Failed to load config file: {e}")
 
+    def load_env_type(self):
+        common_config = self.config_data.get("common", {})
+        return self.env_type or common_config.get("environment", "dev")
+
     def load_settings(self):
         common_config = self.config_data.get("common", {})
-        env_config = self.config_data.get(
-            self.env_type or common_config.get("environment", "dev"), {}
-        )
+        env_config = self.config_data.get(self.load_env_type(), {})
         combined_config = {**common_config, **env_config}
         return CoboSettings.model_validate(combined_config)
 
@@ -111,7 +113,7 @@ base_url = "https://portal.cobo.com"
         if key in ["environment", "auth_method"]:
             self.config_data["common"][key] = value
         else:
-            current_env = self.config_data["common"]["environment"]
+            current_env = self.load_env_type()
             if current_env not in self.config_data:
                 self.config_data[current_env] = {}
             self.config_data[current_env][key] = value
@@ -130,8 +132,10 @@ base_url = "https://portal.cobo.com"
     def delete_config(self, key: str) -> bool:
         if key in ["environment", "auth_method"]:
             return False  # Don't allow deletion of these keys
-        current_env = self.config_data["common"]["environment"]
-        if key in self.config_data[current_env]:
+        current_env = self.load_env_type()
+        if self.config_data.get(current_env) and key in self.config_data.get(
+            current_env
+        ):
             del self.config_data[current_env][key]
             self.save_config()
             self.settings = self.load_settings()
