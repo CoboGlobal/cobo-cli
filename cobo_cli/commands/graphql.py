@@ -62,7 +62,7 @@ def graphql(ctx: click.Context, query: str, variables: str, file: str, raw: bool
 
     payload = {"query": query, "variables": variables_dict}
 
-    response = make_request(ctx, "POST", "/graphql", prefix="/web", json=payload)
+    response = make_request(ctx, "POST", "/graphql", prefix="", json=payload)
 
     if raw:
         click.echo(response.text)

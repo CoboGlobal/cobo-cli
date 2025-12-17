@@ -76,18 +76,10 @@ def app_directory_with_env_file():
 def validate_manifest_and_get_app_id(
     ctx: click.Context, require_dev_app_id: bool = True, require_app_id: bool = False
 ) -> tuple[Manifest, str]:
-    if not is_app_directory():
-        raise BadParameter(
-            f"The file {default_manifest_file} does not exist. "
-            "Please ensure you are running this command in a portal app directory that contains a manifest file. "
-            "If you haven't created a manifest file yet, please create and update it first.",
-            ctx=ctx,
-        )
-
     env = ctx.obj.env
 
     try:
-        manifest = Manifest.load(default_manifest_file)
+        manifest, _ = Manifest.load()
     except ValueError as e:
         raise BadParameter(str(e), ctx=ctx)
 
@@ -119,7 +111,10 @@ def create_sub_project(
     sub_project_dir = os.path.join(project_dir, sub_dir)
     os.makedirs(sub_project_dir, exist_ok=True)
 
-    repo_name = f"cobo-{framework}-template"
+    if framework == "flutter":
+        repo_name = "cobo-ucw-flutter-template"
+    else:
+        repo_name = f"cobo-{framework}-template"
     archive_url = f"{GITHUB_REPO_BASE_URL}/{repo_name}/archive/main.tar.gz"
 
     try:

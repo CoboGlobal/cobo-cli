@@ -45,7 +45,7 @@ def load_api_spec(custom_spec_path=None):
             update_spec()
 
     try:
-        with open(spec_file, "r") as f:
+        with open(spec_file, "rb") as f:
             return yaml.safe_load(f)
     except Exception as e:
         raise click.ClickException(f"Failed to open OpenAPI specification file: {e}")
