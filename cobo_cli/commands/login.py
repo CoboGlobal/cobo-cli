@@ -173,11 +173,17 @@ def login(ctx, login_type, refresh_token):
                 )
 
             # Save the new org token in the .env file
-            set_key(".env", f"ORG_TOKEN_{org_uuid}", token_obj["access_token"])
+            set_key(
+                ".env",
+                f"ORG_TOKEN_{org_uuid}",
+                token_obj["access_token"],
+                quote_mode="never",
+            )
             set_key(
                 ".env",
                 f"ORG_REFRESH_TOKEN_{org_uuid}",
                 token_obj.get("refresh_token", refresh_token_value),
+                quote_mode="never",
             )
             click.echo(
                 f"Organization access token refreshed successfully for org: {org_uuid}"
@@ -215,9 +221,16 @@ def login(ctx, login_type, refresh_token):
                 org_uuid = token_obj.get("org_id")
 
                 # Save the org token in the .env file
-                set_key(".env", f"ORG_TOKEN_{org_uuid}", access_token)
-                set_key(".env", f"ORG_REFRESH_TOKEN_{org_uuid}", refresh_token_value)
-                set_key(".env", "CURRENT_ORG_UUID", org_uuid)
+                set_key(
+                    ".env", f"ORG_TOKEN_{org_uuid}", access_token, quote_mode="never"
+                )
+                set_key(
+                    ".env",
+                    f"ORG_REFRESH_TOKEN_{org_uuid}",
+                    refresh_token_value,
+                    quote_mode="never",
+                )
+                set_key(".env", "CURRENT_ORG_UUID", org_uuid, quote_mode="never")
                 click.echo(
                     f"Got token for org {org_uuid}, saved to .env file with key: ORG_TOKEN_{org_uuid}"
                 )
@@ -302,7 +315,7 @@ def switch_org(ctx):
 
     if 1 <= choice <= len(org_tokens):
         selected_org_uuid = list(org_tokens.keys())[choice - 1]
-        set_key(".env", "CURRENT_ORG_UUID", selected_org_uuid)
+        set_key(".env", "CURRENT_ORG_UUID", selected_org_uuid, quote_mode="never")
         click.echo(f"Switched to organization: {selected_org_uuid}")
     else:
         click.echo("Invalid choice. No changes made.")

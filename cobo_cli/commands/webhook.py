@@ -110,10 +110,13 @@ def listen(ctx, events, forward):
 
     def on_message(ws, message):
         event = json.loads(message)
-        click.echo(json.dumps(event, indent=2))
+        event_data = event.get("message", {}).get("message", {})
+        if not event_data:
+            event_data = event
+        click.echo(json.dumps(event_data, indent=2))
         if forward:
             try:
-                requests.post(forward, json=event)
+                requests.post(forward, json=event_data)
             except requests.RequestException as e:
                 click.echo(f"Error forwarding event: {str(e)}")
 

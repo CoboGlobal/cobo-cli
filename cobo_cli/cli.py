@@ -21,6 +21,7 @@ from cobo_cli.commands import (
     open,
     post_api,
     put_api,
+    skill,
     webhook,
 )
 from cobo_cli.data.auth_methods import AuthMethodType
@@ -132,6 +133,7 @@ cli.add_command(doc)
 cli.add_command(env)
 cli.add_command(logs)
 cli.add_command(auth)
+cli.add_command(skill)
 cli.add_command(webhook)
 
 # Add API commands
