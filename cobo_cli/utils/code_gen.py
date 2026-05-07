@@ -274,7 +274,18 @@ class TemplateCodeGen(CodeGen):
         processed_lines = []
         stack = [True]  # Condition stack
         for line in lines:
-            if line.strip().startswith(("#")):  # Check comment lines
+            # Check comment lines
+            is_comment_lines = (
+                (line.strip().startswith("#") and "%" in line.strip())
+                or (line.strip().startswith("//") and "%" in line.strip())
+                or (
+                    line.strip().startswith("{/*")
+                    and line.strip().endswith("*/}")
+                    and "%" in line.strip()
+                )
+            )
+
+            if is_comment_lines:
                 if "%if" in line:
                     condition = self._parse_condition(line, context)
                     stack.append(condition and stack[-1])
@@ -309,6 +320,8 @@ class TemplateCodeGen(CodeGen):
         key = parts[0]
         op = parts[1]
         value = " ".join(parts[2:])
+        if value.endswith("*/}"):
+            value = value[:-3].strip()
 
         if op == "==":
             return context.get(key) == value

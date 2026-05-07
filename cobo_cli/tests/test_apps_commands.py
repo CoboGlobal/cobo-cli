@@ -46,6 +46,7 @@ class TestAppsCommands(unittest.TestCase):
                 "custodial_asset_wallet:withdraw",
             ],
             "optional_permissions": ["custodial_asset_wallet:withdraw"],
+            "operation_approval_rules": [],
         }
 
     def setup_test_environment(self, **kwargs):

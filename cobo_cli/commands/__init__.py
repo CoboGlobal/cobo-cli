@@ -13,6 +13,7 @@ from .logs import logs
 from .open import open
 from .post import post_api
 from .put import put_api
+from .skill import skill
 from .webhook import webhook
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "auth",
     "logs",
     "graphql",
+    "skill",
     "webhook",
 ]
