@@ -7,8 +7,11 @@ from click import ClickException
 from dotenv import get_key, load_dotenv, set_key  # Import dotenv functions
 from nacl.signing import SigningKey
 
+from cobo_cli.data.auth_methods import AuthMethodType
 from cobo_cli.data.context import CommandContext
+from cobo_cli.data.environments import EnvironmentType
 from cobo_cli.data.manifest import Manifest
+from cobo_cli.utils.api import make_request
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +196,58 @@ def handle_app_key_generation(pubkey: str, secret: str, force: bool, file: str =
 
     # Store the APP_SECRET in the .env file
     set_key(dotenv_path, "APP_SECRET", secret, quote_mode="never")
+
+
+@keys.command(
+    "register", help="Register a dev API key to Cobo platform (dev environment only)."
+)
+@click.option(
+    "--pubkey",
+    type=str,
+    help="Public key to register. Defaults to api_key in config.",
+)
+@click.pass_context
+def register_key(ctx: click.Context, pubkey: str):
+    """Register an API public key to Cobo platform."""
+    command_context: CommandContext = ctx.obj
+
+    if (
+        command_context.env != EnvironmentType.DEVELOPMENT
+        and command_context.env != EnvironmentType.SANDBOX
+    ):
+        raise ClickException(
+            "This command can only be used in the dev environment. "
+            "Use 'cobo env set dev' to switch."
+        )
+
+    if not pubkey:
+        pubkey = command_context.config_manager.get_config("api_key")
+
+    if not pubkey:
+        raise ClickException("No public key provided or found in config.")
+
+    response = make_request(
+        ctx,
+        "POST",
+        "/developers/cli_dev_api_key",
+        auth=AuthMethodType.USER,
+        json={"api_key": pubkey},
+    )
+
+    if response.status_code != 200 and response.status_code != 201:
+        try:
+            error_data = response.json()
+            error_msg = (
+                error_data.get("error_message")
+                or error_data.get("message")
+                or response.text
+            )
+        except Exception:
+            error_msg = response.text
+        raise ClickException(f"Failed to register API key: {error_msg}")
+
+    click.echo("API key registered successfully.")
+    click.echo(f"Public key: {pubkey}")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,14 @@
 [tool.poetry]
 name = "cobo-cli"
-version = "0.1.0"
+version = "0.1.8"
 description = "Cobo Command-line Tool"
 authors = ["Cobo <support@cobo.com>"]
 license = "MIT"
 readme = "README.md"
 packages = [{ include = "cobo_cli" }]
+include = [
+    { path = "skills", format = ["sdist", "wheel"] }
+]
 
 [tool.poetry.dependencies]
 python = "^3.9"

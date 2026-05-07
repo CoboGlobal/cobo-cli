@@ -68,6 +68,7 @@ Check full documentation [here](https://www.cobo.com/developers/v2/developer-too
   - `list`: List all configuration values.
   - `delete`: Delete a configuration value.
   - `show-path`: Show the configuration file path.
+  - `env`: Print env vars for SDK samples. Use `--format shell` (default) / `powershell` / `cmd` for your platform; then `eval $(cobo config env)` or the doc-recommended command.
 
 ### Login and Logout
 
@@ -104,12 +105,47 @@ Check full documentation [here](https://www.cobo.com/developers/v2/developer-too
   - `listen`: Listen for webhook events using WebSocket.
   - `trigger`: Manually trigger a webhook event.
 
+### AI Coding Agent Integration
+
+- **skill**: Install and manage AI coding agent skills.
+  - `install`: Install cobo-waas skill for an AI coding agent (claude, cursor, or all).
+  - `list`: List available skills.
+  - `remove`: Remove installed skill from an AI coding agent.
+  - `status`: Show skill installation status.
+
 ### Other Commands
 
 - **open**: Open a specific Cobo portal page in the default web browser.
 - **keys**: Generate and manage API/APP keys.
   - `generate`: Generate a new API/APP key pair.
 - **version**: Display the current version of the Cobo CLI tool.
+
+## AI Coding Agent Setup
+
+After installing cobo-cli, you can install the WaaS skill for your AI coding assistant:
+
+```bash
+# Install globally for Claude Code
+cobo skill install claude
+
+# Install in current project only
+cobo skill install claude --scope local
+
+# Install for all supported agents
+cobo skill install all
+
+# Check installation status
+cobo skill status
+
+# Remove skill
+cobo skill remove claude
+```
+
+The skill enables AI agents (Claude Code, Cursor) to:
+- Set up Cobo API authentication
+- Create and manage wallets (Custodial, MPC)
+- Execute transfers and monitor transactions
+- Generate SDK code in Python, JavaScript, Go, Java
 
 ## Development
 

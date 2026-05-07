@@ -1,4 +1,5 @@
 import os
+import shlex
 
 import click
 
@@ -83,6 +84,61 @@ def show_config_path(ctx: click.Context):
     config_manager = command_context.config_manager
     absolute_path = os.path.abspath(config_manager.config_file)
     click.echo(f"Configuration file path: {absolute_path}")
+
+
+# (env_var_name, settings_attr) — single source of truth for export list
+ENV_EXPORT = [
+    ("COBO_ENV", "environment"),
+    ("COBO_API_SECRET", "api_secret"),
+    ("COBO_API_KEY", "api_key"),
+    ("COBO_API_HOST", "api_host"),
+]
+
+
+def _format_shell(name: str, value: str) -> str:
+    return f"export {name}={shlex.quote(value)}"
+
+
+def _format_powershell(name: str, value: str) -> str:
+    safe = str(value).replace("'", "''")
+    return f"$env:{name} = '{safe}'"
+
+
+def _format_cmd(name: str, value: str) -> str:
+    escaped = str(value).replace("^", "^^").replace('"', '^"')
+    return f'set "{name}={escaped}"'
+
+
+_ENV_FORMATTERS = {
+    "shell": _format_shell,
+    "powershell": _format_powershell,
+    "cmd": _format_cmd,
+}
+
+
+@config.command("env")
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["shell", "powershell", "cmd"]),
+    default="shell",
+    help="Output format: shell (bash/zsh), powershell, or cmd (Windows CMD).",
+)
+@click.pass_context
+def config_env(ctx: click.Context, fmt: str):
+    """Print env vars from current config for use in your shell.
+
+    macOS/Linux (bash/zsh):  eval $(cobo config env)
+    Windows PowerShell:      cobo config env --format powershell | Invoke-Expression
+    Windows CMD:            cobo config env --format cmd > env.bat && env.bat
+    """
+    command_context: CommandContext = ctx.obj
+    config_manager = command_context.config_manager
+    formatter = _ENV_FORMATTERS[fmt]
+    for name, attr in ENV_EXPORT:
+        value = getattr(config_manager.settings, attr, None)
+        if value is not None:
+            click.echo(formatter(name, value))
 
 
 if __name__ == "__main__":
