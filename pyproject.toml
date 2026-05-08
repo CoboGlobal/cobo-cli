@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cobo-cli"
-version = "0.1.8"
+version = "0.1.9"
 description = "Cobo Command-line Tool"
 authors = ["Cobo <support@cobo.com>"]
 license = "MIT"
@@ -11,15 +11,15 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
-gitpython = "^3.1.43"
-pynacl = "^1.5.0"
+python = ">=3.10,<4.0"
+gitpython = "^3.1.50"
+pynacl = "^1.6.2"
 click = "^8.1.7"
 dataclasses-json = "^0.6.7"
-python-dotenv = "^1.0.1"
+python-dotenv = "^1.2.2"
 pyyaml = "^6.0.2"
-requests = "^2.32.3"
-urllib3 = ">2.6.0"
+requests = "^2.33.0"
+urllib3 = "^2.6.3"
 websocket-client = "^1.8.0"
 pydantic = "^2.9.2"
 pydantic-settings = "^2.6.1"
@@ -30,7 +30,7 @@ email-validator = "^2.2.0"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.6.2"
-black = "^24.3.0"
+black = "^26.3.1"
 flake8 = "^3.8.3"
 isort = "^5.11.5"
 ossaudit = "^0.5.0"
@@ -39,7 +39,7 @@ coverage = "^7.6.4"
 pysocks = "^1.7.1"
 pytest-cov = "^6.0.0"
 pytest-mock = "^3.14.0"
-pytest = "^8.3.3"
+pytest = "^9.0.3"
 tox = "^4.23.2"
 
 
