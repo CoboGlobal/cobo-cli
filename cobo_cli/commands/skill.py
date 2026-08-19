@@ -35,7 +35,8 @@ class SkillChoice(click.ParamType):
             )
         return value
 
-    def get_metavar(self, param):
+    def get_metavar(self, param, ctx=None):
+        # click >= 8.2 传入 ctx; 保留可选参数以同时兼容 8.1 与 8.2+
         return "NAME"
 
 

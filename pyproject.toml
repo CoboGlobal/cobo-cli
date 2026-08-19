@@ -14,7 +14,7 @@ include = [
 python = ">=3.10,<4.0"
 gitpython = "==3.1.50"
 pynacl = "==1.6.2"
-click = "==8.1.7"
+click = "^8.1.7"
 dataclasses-json = "==0.6.7"
 python-dotenv = "==1.2.2"
 pyyaml = "==6.0.2"

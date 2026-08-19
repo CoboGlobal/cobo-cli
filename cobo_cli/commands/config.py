@@ -5,6 +5,22 @@ import click
 
 from cobo_cli.data.context import CommandContext
 
+SENSITIVE_KEY_MARKERS = ("secret", "token", "password", "private")
+
+
+def mask_if_sensitive(key: str, value) -> str:
+    """敏感配置值不得回显到标准输出。
+
+    `cobo config set api_secret <私钥>` 原本会把私钥完整打印出来, 一旦终端被录屏、
+    日志被采集或历史被共享即造成泄漏。此处仅保留末 4 位以便用户确认写对了哪一条。
+    """
+    text = str(value)
+    if not any(m in key.lower() for m in SENSITIVE_KEY_MARKERS):
+        return text
+    if len(text) <= 4:
+        return "*" * len(text)
+    return f"{'*' * 8}{text[-4:]}"
+
 
 @click.group(
     "config",
@@ -28,7 +44,7 @@ def set_config(ctx: click.Context, key: str, value: str):
     command_context: CommandContext = ctx.obj
     config_manager = command_context.config_manager
     if config_manager.set_config(key, value):
-        click.echo(f"Configuration '{key}' set to '{value}'")
+        click.echo(f"Configuration '{key}' set to '{mask_if_sensitive(key, value)}'")
     else:
         click.echo(
             f"Failed to set configuration '{key}'. Make sure it's a valid configuration key."
@@ -44,7 +60,7 @@ def get_config(ctx: click.Context, key: str):
     config_manager = command_context.config_manager
     value = config_manager.get_config(key)
     if value is not None:
-        click.echo(f"{key}: {value}")
+        click.echo(f"{key}: {mask_if_sensitive(key, value)}")
     else:
         click.echo(f"Configuration '{key}' not found")
 
@@ -58,7 +74,7 @@ def list_config(ctx: click.Context):
     configs = config_manager.list_configs()
     if configs:
         for key, value in configs.items():
-            click.echo(f"{key}: {value}")
+            click.echo(f"{key}: {mask_if_sensitive(key, value)}")
     else:
         click.echo("No configurations found")
 

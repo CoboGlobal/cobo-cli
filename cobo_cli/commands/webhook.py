@@ -25,7 +25,8 @@ class LazyChoice(click.Choice):
         self.choices_func = choices_func
         super().__init__([])
 
-    def get_metavar(self, param):
+    def get_metavar(self, param, ctx=None):
+        # click >= 8.2 传入 ctx; 保留可选参数以同时兼容 8.1 与 8.2+
         return "EVENT_TYPE"
 
     def get_missing_message(self, param):
