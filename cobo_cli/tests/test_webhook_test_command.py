@@ -137,3 +137,51 @@ class TestCommandVerdict:
         result, _ = _invoke(["--tamper"], 401)
         assert result.exit_code == 0
         assert "Correctly rejected" in result.output
+
+
+def test_injected_values_land_in_the_deposit_slot():
+    event = build_event(
+        "deposit",
+        "wallets.transaction.updated",
+        "Completed",
+        "http://x",
+        wallet_id="my-wallet",
+        address="0xmine",
+        amount="12.5",
+    )
+    data = event["data"]
+    assert data["wallet_id"] == "my-wallet"
+    assert data["destination"]["wallet_id"] == "my-wallet"
+    assert data["destination"]["address"] == "0xmine"
+    assert data["destination"]["amount"] == "12.5"
+
+
+def test_injected_values_land_in_the_withdrawal_slot():
+    event = build_event(
+        "withdrawal",
+        "wallets.transaction.updated",
+        "Completed",
+        "http://x",
+        wallet_id="my-wallet",
+        address="0xmine",
+        amount="12.5",
+    )
+    data = event["data"]
+    # The owned side of a withdrawal is the source, and the recipient sits one
+    # level deeper than it does for a deposit.
+    assert data["wallet_id"] == "my-wallet"
+    assert data["source"]["wallet_id"] == "my-wallet"
+    assert data["destination"]["account_output"]["address"] == "0xmine"
+    assert data["destination"]["account_output"]["amount"] == "12.5"
+    assert "address" not in data["destination"]
+
+
+@pytest.mark.parametrize("sample_type", ["deposit", "withdrawal"])
+def test_tamper_changes_the_body_even_with_a_custom_amount(sample_type):
+    # A literal substitution would match nothing here and would quietly send a
+    # correctly signed body while reporting the payload as corrupted.
+    _, post = _invoke(["--type", sample_type, "--amount", "12.5", "--tamper"], 400)
+    sent_body = post.call_args.kwargs["data"]
+    sent_headers = post.call_args.kwargs["headers"]
+    assert b'"amount":"12.5"' not in sent_body
+    assert verify_like_documented_handler(sent_body, sent_headers) is False

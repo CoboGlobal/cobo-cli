@@ -13,7 +13,7 @@ against only one of the two shapes silently drops the other.
 
 import time
 import uuid
-from typing import Dict
+from typing import Dict, Optional
 
 # The envelope follows the WebhookEvent schema published in the OpenAPI spec:
 # event_id / url / created_timestamp / type / data.
@@ -109,8 +109,34 @@ def _withdrawal_transaction(status: str) -> Dict:
     }
 
 
-def build_event(sample_type: str, event_type: str, status: str, url: str) -> Dict:
-    """Build a complete webhook event envelope around a sample transaction."""
+def recipient_slot(data: Dict) -> Dict:
+    """Return the dict that holds the recipient ``address`` and ``amount``.
+
+    This is the shape difference the module docstring warns about, resolved in
+    one place: a deposit keeps the recipient directly under ``destination``, a
+    withdrawal nests it one level deeper under ``account_output``.
+    """
+    destination = data["destination"]
+    return destination.get("account_output", destination)
+
+
+def build_event(
+    sample_type: str,
+    event_type: str,
+    status: str,
+    url: str,
+    wallet_id: Optional[str] = None,
+    address: Optional[str] = None,
+    amount: Optional[str] = None,
+) -> Dict:
+    """Build a complete webhook event envelope around a sample transaction.
+
+    The sample identifiers are deliberately synthetic: no hardcoded value can
+    mean anything in someone else's database. Pass ``wallet_id`` / ``address``
+    / ``amount`` to make the event match a record the handler under test can
+    actually look up. Each is written to the slot the chosen shape uses, so a
+    caller never has to know which of the two layouts applies.
+    """
     if sample_type not in SAMPLE_TYPES:
         raise ValueError(f"sample_type must be one of {SAMPLE_TYPES}")
     data = (
@@ -118,6 +144,18 @@ def build_event(sample_type: str, event_type: str, status: str, url: str) -> Dic
         if sample_type == "deposit"
         else _withdrawal_transaction(status)
     )
+    if wallet_id is not None:
+        # The wallet appears both at the top level and on the side of the
+        # transfer this org owns: the destination for a deposit, the source
+        # for a withdrawal.
+        data["wallet_id"] = wallet_id
+        owned = data["destination"] if sample_type == "deposit" else data["source"]
+        owned["wallet_id"] = wallet_id
+    slot = recipient_slot(data)
+    if address is not None:
+        slot["address"] = address
+    if amount is not None:
+        slot["amount"] = amount
     return {
         "event_id": str(uuid.uuid4()),
         "url": url,

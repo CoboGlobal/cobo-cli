@@ -12,6 +12,7 @@ from cobo_cli.utils.webhook_samples import (
     SAMPLE_TYPES,
     WEBHOOK_EVENT_TYPES,
     build_event,
+    recipient_slot,
 )
 from cobo_cli.utils.webhook_signing import TEST_PUBLIC_KEY, build_headers
 from cobo_cli.utils.ws import generate_ws_apikey_auth_headers
@@ -209,18 +210,44 @@ if __name__ == "__main__":
     help="Transaction status carried in the event data.",
 )
 @click.option(
+    "--wallet-id",
+    default=None,
+    help="Use your own wallet id so the handler can look the record up.",
+)
+@click.option(
+    "--address",
+    default=None,
+    help="Use your own recipient address. Placed in whichever slot the chosen "
+    "shape uses, so you need not know the layout.",
+)
+@click.option(
+    "--amount",
+    default=None,
+    help="Use your own recipient amount, placed alongside --address.",
+)
+@click.option(
     "--tamper",
     is_flag=True,
     help="Corrupt the body after signing. A correct endpoint must reject this.",
 )
-def test_webhook(forward, sample_type, event_type, status, tamper):
+def test_webhook(
+    forward, sample_type, event_type, status, wallet_id, address, amount, tamper
+):
     """Verify a webhook handler without deploying it or waiting for a real event.
 
     The event is built and signed locally, so this works in every environment
     and needs no public URL. It is signed with a dedicated test key -- point
     your verifier at the key printed below while testing.
     """
-    event = build_event(sample_type, event_type, status, forward)
+    event = build_event(
+        sample_type,
+        event_type,
+        status,
+        forward,
+        wallet_id=wallet_id,
+        address=address,
+        amount=amount,
+    )
 
     # Sign the exact bytes that go on the wire. Serialising once and reusing the
     # result is the whole point: re-encoding would change key order and break
@@ -230,8 +257,14 @@ def test_webhook(forward, sample_type, event_type, status, tamper):
     headers, signature = build_headers(raw_body, timestamp)
 
     if tamper:
-        # Flip one byte after signing so the signature no longer matches.
-        raw_body = raw_body.replace(b'"amount":"0.0002"', b'"amount":"9.9999"', 1)
+        # Change the amount through the shape-aware slot rather than by
+        # substituting a literal: with --amount the literal may not be there,
+        # and a substitution that silently matched nothing would send a
+        # correctly signed body while claiming to have corrupted it. Re-dumping
+        # the same dict keeps key order, so only the amount differs.
+        slot = recipient_slot(event["data"])
+        slot["amount"] = "9.9999" if slot["amount"] != "9.9999" else "1.1111"
+        raw_body = json.dumps(event, separators=(",", ":")).encode()
 
     click.echo(f"Verification public key: {TEST_PUBLIC_KEY}")
     click.echo("  (test key -- switch back to your environment key before going live)")
