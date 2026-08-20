@@ -177,11 +177,96 @@ def test_injected_values_land_in_the_withdrawal_slot():
 
 
 @pytest.mark.parametrize("sample_type", ["deposit", "withdrawal"])
-def test_tamper_changes_the_body_even_with_a_custom_amount(sample_type):
-    # A literal substitution would match nothing here and would quietly send a
-    # correctly signed body while reporting the payload as corrupted.
-    _, post = _invoke(["--type", sample_type, "--amount", "12.5", "--tamper"], 400)
+def test_tamper_flips_the_status_whatever_the_shape(sample_type):
+    # Status is the one field every transaction carries regardless of shape,
+    # and flipping it is the change that actually pays off for an attacker: a
+    # handler that credits on Completed without verifying can be told anything
+    # completed.
+    _, post = _invoke(["--type", sample_type, "--status", "Failed", "--tamper"], 400)
     sent_body = post.call_args.kwargs["data"]
     sent_headers = post.call_args.kwargs["headers"]
-    assert b'"amount":"12.5"' not in sent_body
+    assert json.loads(sent_body)["data"]["status"] == "Completed"
     assert verify_like_documented_handler(sent_body, sent_headers) is False
+
+
+REAL_TRANSACTION = {
+    "transaction_id": "tx-from-the-api",
+    "wallet_id": "wallet-from-the-api",
+    "type": "Withdrawal",
+    "status": "Failed",
+    "destination": {"account_output": {"address": "0xreal", "amount": "3.25"}},
+}
+
+
+def _invoke_fetching(args, transactions, list_status=200, post_status=200):
+    listing = MagicMock(status_code=list_status)
+    listing.json.return_value = {"data": transactions}
+    response = MagicMock(status_code=post_status, text="ok")
+    with patch(
+        "cobo_cli.commands.webhook.make_request", return_value=listing
+    ) as fetch, patch(
+        "cobo_cli.commands.webhook.requests.post", return_value=response
+    ) as post:
+        result = CliRunner().invoke(webhook, ["test", "--forward", ENDPOINT] + args)
+    return result, fetch, post
+
+
+class TestRealTransactionSource:
+    def test_sends_the_fetched_transaction_untouched(self):
+        _, _, post = _invoke_fetching(
+            ["--from-transaction", "tx-from-the-api"], [REAL_TRANSACTION]
+        )
+        sent = json.loads(post.call_args.kwargs["data"])
+        # Nothing added, nothing dropped: the list record is the webhook data.
+        assert sent["data"] == REAL_TRANSACTION
+        assert set(sent) == {"event_id", "url", "created_timestamp", "type", "data"}
+
+    def test_fetched_payload_is_signed_like_any_other(self):
+        _, _, post = _invoke_fetching(
+            ["--from-transaction", "tx-from-the-api"], [REAL_TRANSACTION]
+        )
+        assert (
+            verify_like_documented_handler(
+                post.call_args.kwargs["data"], post.call_args.kwargs["headers"]
+            )
+            is True
+        )
+
+    def test_queries_the_list_endpoint_not_the_detail_one(self):
+        # The detail endpoint carries a `timeline` that no delivery has.
+        _, fetch, _ = _invoke_fetching(
+            ["--from-transaction", "tx-from-the-api"], [REAL_TRANSACTION]
+        )
+        assert fetch.call_args.args[1:] == ("GET", "/transactions")
+        assert fetch.call_args.kwargs["params"]["transaction_ids"] == "tx-from-the-api"
+
+    def test_wallet_source_asks_for_the_latest_transaction(self):
+        _, fetch, _ = _invoke_fetching(["--from-wallet", "w-1"], [REAL_TRANSACTION])
+        assert fetch.call_args.kwargs["params"] == {"limit": 1, "wallet_ids": "w-1"}
+
+    def test_tamper_works_on_a_fetched_transaction(self):
+        _, _, post = _invoke_fetching(
+            ["--from-transaction", "tx-from-the-api", "--tamper"],
+            [REAL_TRANSACTION],
+            post_status=401,
+        )
+        sent_body = post.call_args.kwargs["data"]
+        assert json.loads(sent_body)["data"]["status"] == "Completed"
+        assert (
+            verify_like_documented_handler(sent_body, post.call_args.kwargs["headers"])
+            is False
+        )
+
+    def test_reports_when_no_transaction_matches(self):
+        result, _, post = _invoke_fetching(["--from-wallet", "w-1"], [])
+        assert result.exit_code != 0
+        assert "Found no transaction" in result.output
+        post.assert_not_called()
+
+    def test_rejects_both_sources_at_once(self):
+        result, fetch, _ = _invoke_fetching(
+            ["--from-transaction", "t", "--from-wallet", "w"], [REAL_TRANSACTION]
+        )
+        assert result.exit_code != 0
+        assert "not both" in result.output
+        fetch.assert_not_called()

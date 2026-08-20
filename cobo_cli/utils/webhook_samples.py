@@ -1,5 +1,9 @@
 """Sample webhook payloads used by `cobo webhook test`.
 
+These stand in only until the caller has a transaction of their own; with
+--from-transaction or --from-wallet the command sends a real one instead and
+none of this is used.
+
 The shapes below are taken from real WaaS 2.0 transactions. The single most
 common integration mistake is assuming a deposit and a withdrawal carry the
 recipient in the same place — they do not:
@@ -156,6 +160,18 @@ def build_event(
         slot["address"] = address
     if amount is not None:
         slot["amount"] = amount
+    return wrap_event(data, event_type, url)
+
+
+def wrap_event(data: Dict, event_type: str, url: str) -> Dict:
+    """Put a transaction into the envelope the service delivers it in.
+
+    ``data`` is the transaction exactly as ``GET /transactions`` returns it:
+    the service builds the webhook payload from that same list-shaped record,
+    so a transaction pulled from the API needs nothing added or removed. The
+    four envelope fields are generated per delivery and are the only part that
+    does not come from the transaction.
+    """
     return {
         "event_id": str(uuid.uuid4()),
         "url": url,

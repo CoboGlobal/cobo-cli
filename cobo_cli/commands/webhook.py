@@ -12,7 +12,7 @@ from cobo_cli.utils.webhook_samples import (
     SAMPLE_TYPES,
     WEBHOOK_EVENT_TYPES,
     build_event,
-    recipient_slot,
+    wrap_event,
 )
 from cobo_cli.utils.webhook_signing import TEST_PUBLIC_KEY, build_headers
 from cobo_cli.utils.ws import generate_ws_apikey_auth_headers
@@ -177,6 +177,37 @@ if __name__ == "__main__":
     webhook()
 
 
+def _fetch_transaction(ctx, transaction_id, wallet_id):
+    """Read one of the caller's transactions in the shape a webhook carries.
+
+    The list endpoint is used even when the transaction id is known. The
+    service builds its webhook payload from that same list-shaped record,
+    while the detail endpoint adds a ``timeline`` no delivery ever carries --
+    so this needs nothing stripped and nothing filled in.
+    """
+    params = {"limit": 1}
+    if transaction_id:
+        params["transaction_ids"] = transaction_id
+        described = f"transaction {transaction_id}"
+    else:
+        params["wallet_ids"] = wallet_id
+        described = f"the most recent transaction of wallet {wallet_id}"
+
+    response = make_request(ctx, "GET", "/transactions", params=params)
+    if response.status_code != 200:
+        raise click.ClickException(
+            f"Could not read {described}: "
+            f"{response.status_code} {response.text[:200]}"
+        )
+    transactions = response.json().get("data") or []
+    if not transactions:
+        raise click.ClickException(
+            f"Found no transaction for {described}. Make one first, or drop "
+            "--from-transaction/--from-wallet to send a sample payload."
+        )
+    return transactions[0]
+
+
 @webhook.command(
     "test",
     help="Send a locally signed sample webhook event to your endpoint.",
@@ -210,9 +241,24 @@ if __name__ == "__main__":
     help="Transaction status carried in the event data.",
 )
 @click.option(
+    "--from-transaction",
+    "from_transaction",
+    default=None,
+    help="Build the event from one of your real transactions, fetched by id. "
+    "The service builds its payload from the same record, so nothing is "
+    "simulated except the envelope.",
+)
+@click.option(
+    "--from-wallet",
+    "from_wallet",
+    default=None,
+    help="Build the event from the most recent transaction of this wallet.",
+)
+@click.option(
     "--wallet-id",
     default=None,
-    help="Use your own wallet id so the handler can look the record up.",
+    help="Sample payloads only: use your own wallet id so the handler can look "
+    "the record up.",
 )
 @click.option(
     "--address",
@@ -230,24 +276,53 @@ if __name__ == "__main__":
     is_flag=True,
     help="Corrupt the body after signing. A correct endpoint must reject this.",
 )
+@click.pass_context
 def test_webhook(
-    forward, sample_type, event_type, status, wallet_id, address, amount, tamper
+    ctx,
+    forward,
+    sample_type,
+    event_type,
+    status,
+    from_transaction,
+    from_wallet,
+    wallet_id,
+    address,
+    amount,
+    tamper,
 ):
     """Verify a webhook handler without deploying it or waiting for a real event.
 
-    The event is built and signed locally, so this works in every environment
-    and needs no public URL. It is signed with a dedicated test key -- point
-    your verifier at the key printed below while testing.
+    Prefer --from-transaction or --from-wallet: the transaction is read from
+    your own account in the same shape the service builds its payload from, so
+    the only simulated part is the envelope, and your handler sees the chain,
+    token, fee and status it will really see. Without them a sample payload is
+    sent instead, which is what you need before any transaction exists.
+
+    The event is signed locally, so this works in every environment and needs
+    no public URL. It is signed with a dedicated test key -- point your
+    verifier at the key printed below while testing.
     """
-    event = build_event(
-        sample_type,
-        event_type,
-        status,
-        forward,
-        wallet_id=wallet_id,
-        address=address,
-        amount=amount,
-    )
+    if from_transaction and from_wallet:
+        raise click.ClickException(
+            "Pass either --from-transaction or --from-wallet, not both."
+        )
+    if from_transaction or from_wallet:
+        data = _fetch_transaction(ctx, from_transaction, from_wallet)
+        click.echo(
+            f"Using your transaction {data.get('transaction_id')} "
+            f"[{data.get('type')}, {data.get('status')}]"
+        )
+        event = wrap_event(data, event_type, forward)
+    else:
+        event = build_event(
+            sample_type,
+            event_type,
+            status,
+            forward,
+            wallet_id=wallet_id,
+            address=address,
+            amount=amount,
+        )
 
     # Sign the exact bytes that go on the wire. Serialising once and reusing the
     # result is the whole point: re-encoding would change key order and break
@@ -257,13 +332,14 @@ def test_webhook(
     headers, signature = build_headers(raw_body, timestamp)
 
     if tamper:
-        # Change the amount through the shape-aware slot rather than by
-        # substituting a literal: with --amount the literal may not be there,
-        # and a substitution that silently matched nothing would send a
-        # correctly signed body while claiming to have corrupted it. Re-dumping
-        # the same dict keeps key order, so only the amount differs.
-        slot = recipient_slot(event["data"])
-        slot["amount"] = "9.9999" if slot["amount"] != "9.9999" else "1.1111"
+        # Flip the status, which every transaction carries whatever its shape,
+        # and which is the change an attacker would actually want to make: a
+        # handler that credits on Completed without checking the signature can
+        # be told anything is Completed. Editing the parsed event and
+        # re-dumping keeps key order, so the body stays valid JSON and is
+        # guaranteed to differ from what was signed.
+        data = event["data"]
+        data["status"] = "Completed" if data.get("status") != "Completed" else "Failed"
         raw_body = json.dumps(event, separators=(",", ":")).encode()
 
     click.echo(f"Verification public key: {TEST_PUBLIC_KEY}")
