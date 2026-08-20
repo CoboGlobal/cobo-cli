@@ -308,8 +308,11 @@ def test_webhook(
         )
     if from_transaction or from_wallet:
         data = _fetch_transaction(ctx, from_transaction, from_wallet)
-        click.echo(
-            f"Using your transaction {data.get('transaction_id')} "
+        # Describe what is actually being sent. --type and --status shape the
+        # samples only, and repeating them here would misreport a fetched
+        # transaction as whatever the sample defaults happen to be.
+        described = (
+            f"your transaction {data.get('transaction_id')} "
             f"[{data.get('type')}, {data.get('status')}]"
         )
         event = wrap_event(data, event_type, forward)
@@ -323,6 +326,7 @@ def test_webhook(
             address=address,
             amount=amount,
         )
+        described = f"a sample payload [{sample_type}, {status}]"
 
     # Sign the exact bytes that go on the wire. Serialising once and reusing the
     # result is the whole point: re-encoding would change key order and break
@@ -344,7 +348,7 @@ def test_webhook(
 
     click.echo(f"Verification public key: {TEST_PUBLIC_KEY}")
     click.echo("  (test key -- switch back to your environment key before going live)")
-    click.echo(f"Sending {event_type} [{sample_type}, {status}] to {forward}")
+    click.echo(f"Sending {event_type} from {described} to {forward}")
     if tamper:
         click.echo("Body was modified after signing; your endpoint must reject it.")
 

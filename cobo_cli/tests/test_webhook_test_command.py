@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 from unittest.mock import MagicMock, patch
@@ -200,7 +201,10 @@ REAL_TRANSACTION = {
 
 def _invoke_fetching(args, transactions, list_status=200, post_status=200):
     listing = MagicMock(status_code=list_status)
-    listing.json.return_value = {"data": transactions}
+    # A fresh copy per call: the command edits the fetched record in place for
+    # --tamper, which on real data is a throwaway parse but here would leak
+    # into the next test through the shared literal.
+    listing.json.return_value = {"data": copy.deepcopy(transactions)}
     response = MagicMock(status_code=post_status, text="ok")
     with patch(
         "cobo_cli.commands.webhook.make_request", return_value=listing
@@ -270,3 +274,18 @@ class TestRealTransactionSource:
         assert result.exit_code != 0
         assert "not both" in result.output
         fetch.assert_not_called()
+
+
+class TestReportedSource:
+    def test_reports_the_fetched_transaction_not_the_sample_defaults(self):
+        # --type/--status shape the samples only; echoing them for a fetched
+        # transaction reported a withdrawal as a deposit.
+        result, _, _ = _invoke_fetching(
+            ["--from-transaction", "tx-from-the-api"], [REAL_TRANSACTION]
+        )
+        assert "your transaction tx-from-the-api [Withdrawal, Failed]" in result.output
+        assert "deposit" not in result.output
+
+    def test_reports_a_sample_as_a_sample(self):
+        result, _ = _invoke(["--type", "withdrawal"], 200)
+        assert "a sample payload [withdrawal, Completed]" in result.output
