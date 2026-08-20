@@ -20,17 +20,26 @@ def get_config_path() -> str:
 
 
 class CoboSettings(BaseSettings):
-    environment: str = Field(..., env="COBO_ENVIRONMENT")
-    auth_method: str = Field(..., env="COBO_AUTH_METHOD")
-    api_key: Optional[str] = Field(None, env="COBO_API_KEY")
-    api_secret: Optional[str] = Field(None, env="COBO_API_SECRET")
-    org_access_token: Optional[str] = Field(None, env="COBO_ORG_ACCESS_TOKEN")
-    user_access_token: Optional[str] = Field(None, env="COBO_USER_ACCESS_TOKEN")
-    api_host: Optional[str] = Field(None, env="COBO_API_HOST")
-    websocket_host: Optional[str] = Field(None, env="COBO_WEBSOCKET_HOST")
-    base_url: Optional[str] = Field(None, env="COBO_BASE_URL")
+    environment: str = Field(..., validation_alias="COBO_ENVIRONMENT")
+    auth_method: str = Field(..., validation_alias="COBO_AUTH_METHOD")
+    api_key: Optional[str] = Field(None, validation_alias="COBO_API_KEY")
+    api_secret: Optional[str] = Field(None, validation_alias="COBO_API_SECRET")
+    org_access_token: Optional[str] = Field(
+        None, validation_alias="COBO_ORG_ACCESS_TOKEN"
+    )
+    user_access_token: Optional[str] = Field(
+        None, validation_alias="COBO_USER_ACCESS_TOKEN"
+    )
+    api_host: Optional[str] = Field(None, validation_alias="COBO_API_HOST")
+    websocket_host: Optional[str] = Field(None, validation_alias="COBO_WEBSOCKET_HOST")
+    base_url: Optional[str] = Field(None, validation_alias="COBO_BASE_URL")
 
-    model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="allow")
+    # validation_alias maps each field to its documented COBO_* environment
+    # variable; populate_by_name keeps the config-file path working, which loads
+    # by field name (api_key, ...) through model_validate.
+    model_config = SettingsConfigDict(
+        env_file_encoding="utf-8", extra="allow", populate_by_name=True
+    )
 
     @field_validator("environment")
     def validate_environment(cls, v):
