@@ -209,7 +209,13 @@ def _fetch_transaction(ctx, transaction_id, wallet_id):
             f"Found no transaction for {described}. Make one first, or drop "
             "--from-transaction/--from-wallet to send a sample payload."
         )
-    return transactions[0]
+    transaction = transactions[0]
+    # The one field a delivery carries that the REST representation does not.
+    # It is the discriminator the published schema dispatches on, so a handler
+    # that deserialises the event with a generated model cannot parse a
+    # payload without it -- the test would fail against a correct handler.
+    transaction["data_type"] = "Transaction"
+    return transaction
 
 
 @webhook.command(

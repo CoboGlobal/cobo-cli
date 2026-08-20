@@ -239,13 +239,14 @@ def _invoke_fetching(args, transactions, list_status=200, post_status=200):
 
 
 class TestRealTransactionSource:
-    def test_sends_the_fetched_transaction_untouched(self):
+    def test_sends_the_fetched_record_plus_the_delivery_discriminator(self):
         _, _, post = _invoke_fetching(
             ["--from-transaction", "tx-from-the-api"], [REAL_TRANSACTION]
         )
         sent = json.loads(post.call_args.kwargs["data"])
-        # Nothing added, nothing dropped: the list record is the webhook data.
-        assert sent["data"] == REAL_TRANSACTION
+        # Every field of the record reaches the handler unchanged, and the one
+        # field a delivery adds over the REST representation is `data_type`.
+        assert sent["data"] == {**REAL_TRANSACTION, "data_type": "Transaction"}
         assert set(sent) == {"event_id", "url", "created_timestamp", "type", "data"}
 
     def test_fetched_payload_is_signed_like_any_other(self):
@@ -351,3 +352,23 @@ def test_env_override_selects_the_key_it_names():
         for other, other_key in COBO_PUBLIC_KEYS.items():
             if other != environment:
                 assert other_key not in outputs[environment]
+
+
+@pytest.mark.parametrize("sample_type", ["deposit", "withdrawal"])
+def test_sample_carries_the_event_data_discriminator(sample_type):
+    event = build_event(
+        sample_type, "wallets.transaction.updated", "Completed", "http://x"
+    )
+    assert event["data"]["data_type"] == "Transaction"
+
+
+def test_fetched_transaction_gains_the_event_data_discriminator():
+    # `data_type` is absent from the REST representation and present on a
+    # delivery; the published schema dispatches on it, so sending a fetched
+    # transaction without it would fail a handler that deserialises the event
+    # with a generated model -- while real deliveries parse fine.
+    fetched = dict(REAL_TRANSACTION)
+    assert "data_type" not in fetched
+    _, _, post = _invoke_fetching(["--from-transaction", "tx-from-the-api"], [fetched])
+    sent = json.loads(post.call_args.kwargs["data"])
+    assert sent["data"]["data_type"] == "Transaction"
