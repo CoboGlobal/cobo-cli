@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 
 import click
 import requests
@@ -7,6 +8,12 @@ import websocket
 
 from cobo_cli.data.context import CommandContext
 from cobo_cli.utils.api import load_api_spec, make_request
+from cobo_cli.utils.webhook_samples import (
+    SAMPLE_TYPES,
+    WEBHOOK_EVENT_TYPES,
+    build_event,
+)
+from cobo_cli.utils.webhook_signing import TEST_PUBLIC_KEY, build_headers
 from cobo_cli.utils.ws import generate_ws_apikey_auth_headers
 
 
@@ -167,3 +174,96 @@ def listen(ctx, events, forward):
 
 if __name__ == "__main__":
     webhook()
+
+
+@webhook.command(
+    "test",
+    help="Send a locally signed sample webhook event to your endpoint.",
+)
+@click.option(
+    "--forward",
+    required=True,
+    help="Your webhook endpoint, e.g. http://localhost:8000/webhooks/cobo",
+)
+@click.option(
+    "--type",
+    "sample_type",
+    type=click.Choice(SAMPLE_TYPES),
+    default="deposit",
+    show_default=True,
+    help="Payload shape to send. Deposits and withdrawals carry the recipient "
+    "in different places, so test both.",
+)
+@click.option(
+    "--event",
+    "event_type",
+    type=click.Choice(WEBHOOK_EVENT_TYPES),
+    default="wallets.transaction.updated",
+    show_default=True,
+    help="Event type placed in the envelope.",
+)
+@click.option(
+    "--status",
+    default="Completed",
+    show_default=True,
+    help="Transaction status carried in the event data.",
+)
+@click.option(
+    "--tamper",
+    is_flag=True,
+    help="Corrupt the body after signing. A correct endpoint must reject this.",
+)
+def test_webhook(forward, sample_type, event_type, status, tamper):
+    """Verify a webhook handler without deploying it or waiting for a real event.
+
+    The event is built and signed locally, so this works in every environment
+    and needs no public URL. It is signed with a dedicated test key -- point
+    your verifier at the key printed below while testing.
+    """
+    event = build_event(sample_type, event_type, status, forward)
+
+    # Sign the exact bytes that go on the wire. Serialising once and reusing the
+    # result is the whole point: re-encoding would change key order and break
+    # the signature, which is the most common cause of "my verification fails".
+    raw_body = json.dumps(event, separators=(",", ":")).encode()
+    timestamp = str(int(time.time() * 1000))
+    headers, signature = build_headers(raw_body, timestamp)
+
+    if tamper:
+        # Flip one byte after signing so the signature no longer matches.
+        raw_body = raw_body.replace(b'"amount":"0.0002"', b'"amount":"9.9999"', 1)
+
+    click.echo(f"Verification public key: {TEST_PUBLIC_KEY}")
+    click.echo("  (test key -- switch back to your environment key before going live)")
+    click.echo(f"Sending {event_type} [{sample_type}, {status}] to {forward}")
+    if tamper:
+        click.echo("Body was modified after signing; your endpoint must reject it.")
+
+    try:
+        response = requests.post(forward, data=raw_body, headers=headers, timeout=10)
+    except requests.RequestException as e:
+        raise click.ClickException(f"Could not reach {forward}: {e}")
+
+    click.echo(f"Endpoint responded {response.status_code}: {response.text[:200]}")
+
+    accepted = response.status_code in (200, 201)
+    if tamper:
+        if accepted:
+            raise click.ClickException(
+                "Endpoint accepted a payload whose signature does not match. "
+                "Verify the signature against the raw request bytes before "
+                "processing the event."
+            )
+        click.echo("Correctly rejected the tampered payload.")
+        return
+
+    if not accepted:
+        raise click.ClickException(
+            "Endpoint did not return 200 or 201. Cobo retries such deliveries up "
+            "to 10 times and then marks the event Failed. Check that the "
+            "signature is verified against the raw bytes and that the handler "
+            "responds within 2 seconds."
+        )
+    click.echo(
+        "Accepted. Now re-run with --tamper to confirm bad signatures are rejected."
+    )
