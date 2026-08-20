@@ -43,3 +43,14 @@ def build_headers(raw_body: bytes, timestamp: str) -> Tuple[Dict[str, str], str]
     for name in SIGNATURE_HEADERS:
         headers[name] = signature
     return headers, signature
+
+
+# Cobo's own verification keys, as published in "Set up a callback or webhook
+# endpoint" under Select Cobo's Public Key. A handler must be pointed at the
+# one matching the environment it receives from; testing against one and
+# deploying against the other passes every local check and then rejects every
+# real delivery.
+COBO_PUBLIC_KEYS = {
+    "dev": "a04ea1d5fa8da71f1dcfccf972b9c4eba0a2d8aba1f6da26f49977b08a0d2718",
+    "prod": "8d4a482641adb2a34b726f05827dba9a9653e5857469b8749052bf4458a86729",
+}

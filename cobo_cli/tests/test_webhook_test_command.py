@@ -9,8 +9,16 @@ from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 
 from cobo_cli.commands.webhook import webhook
+from cobo_cli.data.auth_methods import AuthMethodType
+from cobo_cli.data.context import CommandContext
+from cobo_cli.data.environments import EnvironmentType
+from cobo_cli.utils.config import ConfigManager
 from cobo_cli.utils.webhook_samples import build_event
-from cobo_cli.utils.webhook_signing import TEST_PUBLIC_KEY, build_headers
+from cobo_cli.utils.webhook_signing import (
+    COBO_PUBLIC_KEYS,
+    TEST_PUBLIC_KEY,
+    build_headers,
+)
 
 ENDPOINT = "http://localhost:8000/webhooks/cobo"
 
@@ -97,12 +105,25 @@ class TestSamplePayloadShapes:
         assert event["data"]["data_type"] == "Transaction"
 
 
+def _context():
+    """The context the root command builds before any subcommand runs."""
+    config_manager = ConfigManager()
+    return CommandContext(
+        env=EnvironmentType(config_manager.get_config("environment")),
+        auth_method=AuthMethodType.APIKEY,
+        config_manager=config_manager,
+        api_spec=None,
+    )
+
+
 def _invoke(args, status_code, body="ok"):
     response = MagicMock(status_code=status_code, text=body)
     with patch(
         "cobo_cli.commands.webhook.requests.post", return_value=response
     ) as post:
-        result = CliRunner().invoke(webhook, ["test", "--forward", ENDPOINT] + args)
+        result = CliRunner().invoke(
+            webhook, ["test", "--forward", ENDPOINT] + args, obj=_context()
+        )
     return result, post
 
 
@@ -211,7 +232,9 @@ def _invoke_fetching(args, transactions, list_status=200, post_status=200):
     ) as fetch, patch(
         "cobo_cli.commands.webhook.requests.post", return_value=response
     ) as post:
-        result = CliRunner().invoke(webhook, ["test", "--forward", ENDPOINT] + args)
+        result = CliRunner().invoke(
+            webhook, ["test", "--forward", ENDPOINT] + args, obj=_context()
+        )
     return result, fetch, post
 
 
@@ -289,3 +312,42 @@ class TestReportedSource:
     def test_reports_a_sample_as_a_sample(self):
         result, _ = _invoke(["--type", "withdrawal"], 200)
         assert "a sample payload [withdrawal, Completed]" in result.output
+
+
+class TestLiveKeyGuidance:
+    def test_names_the_key_for_the_configured_environment(self):
+        result, _ = _invoke([], 200)
+        # Whichever environment the runner is configured for, the key printed
+        # must be that environment's -- naming the other one is the mistake
+        # this output exists to prevent.
+        printed = [k for k in COBO_PUBLIC_KEYS.values() if k in result.output]
+        assert len(printed) == 1
+        environment = next(e for e, k in COBO_PUBLIC_KEYS.items() if k == printed[0])
+        assert f"Cobo's {environment} key" in result.output
+
+    def test_still_marks_the_signing_key_as_the_test_one(self):
+        result, _ = _invoke([], 200)
+        assert TEST_PUBLIC_KEY in result.output
+        assert TEST_PUBLIC_KEY not in COBO_PUBLIC_KEYS.values()
+
+
+def test_env_override_selects_the_key_it_names():
+    # --env changes which section the CLI works against, but the persisted
+    # `environment` setting stays put, so reading it named the wrong key.
+    runner = CliRunner()
+    with patch(
+        "cobo_cli.commands.webhook.requests.post",
+        return_value=MagicMock(status_code=200, text="ok"),
+    ):
+        outputs = {}
+        for environment in COBO_PUBLIC_KEYS:
+            context = _context()
+            context.env = EnvironmentType(environment)
+            outputs[environment] = runner.invoke(
+                webhook, ["test", "--forward", ENDPOINT], obj=context
+            ).output
+    for environment, key in COBO_PUBLIC_KEYS.items():
+        assert key in outputs[environment]
+        for other, other_key in COBO_PUBLIC_KEYS.items():
+            if other != environment:
+                assert other_key not in outputs[environment]

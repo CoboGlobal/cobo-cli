@@ -14,7 +14,11 @@ from cobo_cli.utils.webhook_samples import (
     build_event,
     wrap_event,
 )
-from cobo_cli.utils.webhook_signing import TEST_PUBLIC_KEY, build_headers
+from cobo_cli.utils.webhook_signing import (
+    COBO_PUBLIC_KEYS,
+    TEST_PUBLIC_KEY,
+    build_headers,
+)
 from cobo_cli.utils.ws import generate_ws_apikey_auth_headers
 
 
@@ -347,7 +351,23 @@ def test_webhook(
         raw_body = json.dumps(event, separators=(",", ":")).encode()
 
     click.echo(f"Verification public key: {TEST_PUBLIC_KEY}")
-    click.echo("  (test key -- switch back to your environment key before going live)")
+    click.echo("  (test key -- point your verifier at it while testing)")
+    # Name the key to go live with, and name the environment it belongs to.
+    # Both of Cobo's keys verify signatures perfectly well; picking the wrong
+    # one is what rejects every real delivery, and nothing local catches it.
+    # ctx.obj.env, not config_manager.get_config("environment"): the latter
+    # reports the persisted setting, so `--env prod` would still name the dev
+    # key -- the very mix-up this output exists to prevent.
+    environment = ctx.obj.env.value
+    live_key = COBO_PUBLIC_KEYS.get(environment)
+    if live_key:
+        click.echo(f"  before going live, switch to Cobo's {environment} key:")
+        click.echo(f"  {live_key}")
+    else:
+        click.echo(
+            f"  before going live, switch to Cobo's key for the {environment} "
+            "environment (see Set up a callback or webhook endpoint)"
+        )
     click.echo(f"Sending {event_type} from {described} to {forward}")
     if tamper:
         click.echo("Body was modified after signing; your endpoint must reject it.")
