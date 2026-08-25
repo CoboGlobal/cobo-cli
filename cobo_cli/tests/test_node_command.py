@@ -193,3 +193,12 @@ class TestCommands:
             result = _invoke(["stop"])
         assert result.exit_code == 0
         assert "nothing to stop" in result.output
+
+
+def test_mpc_session_traffic_counts_as_connected():
+    # Right after a keygen the tail is all session logs; that traffic only
+    # flows over a live relay connection, so it must not read as inactivity.
+    logs = "KeyGen task completed in session abc:1-xyz, group info:\n" * 3
+    completed = MagicMock(stdout=logs, stderr="")
+    with patch("cobo_cli.utils.tss_node.subprocess.run", return_value=completed):
+        assert "connected to the relay" in relay_state("prod")

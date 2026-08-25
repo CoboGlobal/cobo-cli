@@ -133,6 +133,10 @@ def relay_state(environment: str, tail: int = 40) -> str:
     for line in reversed(lines):
         if "connected." in line:
             return "connected to the relay"
+        # MPC session traffic only flows over a live relay connection, and a
+        # busy session can push the connection lines out of the tail window.
+        if "session" in line and ("KeyGen" in line or "KeySign" in line):
+            return "connected to the relay (serving MPC sessions)"
         if "not bound to any app" in line or "invalid node ID" in line:
             return (
                 "running, waiting to be added to a key share holder group "
