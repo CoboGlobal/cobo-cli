@@ -33,6 +33,7 @@ class CoboSettings(BaseSettings):
     api_host: Optional[str] = Field(None, validation_alias="COBO_API_HOST")
     websocket_host: Optional[str] = Field(None, validation_alias="COBO_WEBSOCKET_HOST")
     base_url: Optional[str] = Field(None, validation_alias="COBO_BASE_URL")
+    spec_url: Optional[str] = Field(None, validation_alias="COBO_SPEC_URL")
 
     # validation_alias maps each field to its documented COBO_* environment
     # variable; populate_by_name keeps the config-file path working, which loads

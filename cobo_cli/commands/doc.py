@@ -3,8 +3,8 @@ import webbrowser
 import click
 
 from cobo_cli.data.context import CommandContext
-from cobo_cli.utils.api import get_operation_help, load_api_spec
-from cobo_cli.utils.openapi import update_spec
+from cobo_cli.utils.api import get_api_spec, get_operation_help
+from cobo_cli.utils.openapi import SPEC_HINT, require_api_spec, update_spec
 
 
 @click.command(
@@ -20,7 +20,14 @@ def doc(ctx: click.Context, topic_or_path: str, update: bool):
     command_context: CommandContext = ctx.obj
 
     if update:
-        update_spec()
+        spec_url = command_context.config_manager.get_config("spec_url")
+        if not spec_url:
+            raise click.ClickException(SPEC_HINT)
+        if not update_spec(spec_url):
+            raise click.ClickException(
+                f"Failed to update the OpenAPI specification from {spec_url}."
+            )
+        click.echo("OpenAPI specification file downloaded successfully.")
         return
 
     base_url = "https://www.cobo.com/developers/v2/"
@@ -34,9 +41,7 @@ def doc(ctx: click.Context, topic_or_path: str, update: bool):
 
     if topic_or_path.startswith("/"):
         # This is an API path, display operation information
-        spec = (
-            command_context.api_spec or load_api_spec()
-        )  # Fall back to default if not provided
+        spec = require_api_spec(get_api_spec(command_context))
         path_info = spec["paths"].get(topic_or_path)
 
         if path_info:

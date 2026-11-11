@@ -17,6 +17,7 @@ from cobo_cli.utils.openapi import (
     get_api_details,
     get_parameter_help,
     load_api_spec,
+    require_api_spec,
     resolve_reference,
 )
 from cobo_cli.utils.signer import Signer
@@ -101,6 +102,43 @@ def make_request(ctx, method, path, prefix="/v2", auth=None, **kwargs):
     return response
 
 
+def get_api_spec(command_context: CommandContext):
+    return command_context.api_spec or load_api_spec(
+        spec_url=command_context.config_manager.get_config("spec_url")
+    )
+
+
+def print_response(response):
+    try:
+        response_json = response.json()
+        formatted_response = json.dumps(response_json, indent=2)
+        click.echo_via_pager(formatted_response)
+    except json.JSONDecodeError:
+        click.echo(response.text)
+
+
+def parse_body_value(value):
+    if not isinstance(value, str):
+        return value
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return value
+    # Only arrays and objects replace the raw value. Scalars stay strings as
+    # typed, since WaaS amounts and IDs are strings and reject numbers.
+    return parsed if isinstance(parsed, (list, dict)) else value
+
+
+def handle_raw_api_request(ctx, path, method, params):
+    """Send a request without an OpenAPI spec, so without local validation."""
+    if method.lower() in ["get", "delete"]:
+        response = make_request(ctx, method, path, params=params)
+    else:
+        body = {key: parse_body_value(value) for key, value in params.items()}
+        response = make_request(ctx, method, path, json=body or None)
+    print_response(response)
+
+
 def handle_api_request(ctx, spec, path, method, params=None):
     api_details, matched_path = get_api_details(spec, path, method)
 
@@ -176,12 +214,7 @@ def handle_api_request(ctx, spec, path, method, params=None):
                 path_params=path_params,
             )
 
-        try:
-            response_json = response.json()
-            formatted_response = json.dumps(response_json, indent=2)
-            click.echo_via_pager(formatted_response)
-        except json.JSONDecodeError:
-            click.echo(response.text)
+        print_response(response)
     else:
         click.echo(f"No {method.upper()} operation found for path: {path}")
 
@@ -268,9 +301,10 @@ def create_api_command(method):
         """Make a {method} request to a Cobo API endpoint."""
 
         command_context: CommandContext = ctx.obj
-        spec = (
-            command_context.api_spec or load_api_spec()
-        )  # Fall back to default if not provided
+        spec = get_api_spec(command_context)
+
+        if list or describe:
+            require_api_spec(spec)
 
         if list:
             operations = list_api_operations(spec, method.upper())
@@ -326,6 +360,10 @@ def create_api_command(method):
             key = args[i].lstrip("-")
             value = args[i + 1] if i + 1 < len(args) else True
             params[key] = value
+
+        if spec is None:
+            handle_raw_api_request(ctx, path, method.upper(), params)
+            return
 
         # Validate parameters
         is_valid, error_message = validate_parameters(
