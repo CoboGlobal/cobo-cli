@@ -7,7 +7,7 @@ import requests
 import websocket
 
 from cobo_cli.data.context import CommandContext
-from cobo_cli.utils.api import load_api_spec, make_request
+from cobo_cli.utils.api import make_request
 from cobo_cli.utils.webhook_samples import (
     SAMPLE_TYPES,
     WEBHOOK_EVENT_TYPES,
@@ -27,41 +27,78 @@ def webhook():
     pass
 
 
-def get_valid_event_types(spec):
-    webhook_event_schema = spec["components"]["schemas"]["WebhookEventType"]
-    return webhook_event_schema["enum"]
+EVENTS_HINT = "Use 'cobo webhook events' to see available event types."
 
 
-class LazyChoice(click.Choice):
-    def __init__(self, choices_func):
-        self.choices_func = choices_func
-        super().__init__([])
+def fetch_event_definitions(ctx):
+    """Return the webhook event definitions the server offers.
+
+    Each item is a dict carrying at least ``event_type``. Raises
+    ClickException when the list cannot be read.
+    """
+    try:
+        response = make_request(ctx, "GET", "/webhooks/event_definitions")
+    except requests.RequestException as e:
+        raise click.ClickException(f"Could not fetch webhook event types: {e}")
+    if response.status_code != 200:
+        raise click.ClickException(
+            "Could not fetch webhook event types: "
+            f"{response.status_code} {response.text[:200]}"
+        )
+    try:
+        body = response.json()
+    except ValueError:
+        raise click.ClickException(
+            f"Could not fetch webhook event types: {response.text[:200]}"
+        )
+    items = body.get("data") if isinstance(body, dict) else body
+    if not isinstance(items, list):
+        raise click.ClickException(
+            f"Could not fetch webhook event types: {response.text[:200]}"
+        )
+    definitions = []
+    for item in items:
+        if isinstance(item, str):
+            definitions.append({"event_type": item})
+        elif isinstance(item, dict) and item.get("event_type"):
+            definitions.append(item)
+    return definitions
+
+
+def fetch_event_types_or_warn(ctx):
+    """Return the server's event types, or None (with a warning) on failure."""
+    try:
+        return [d["event_type"] for d in fetch_event_definitions(ctx)]
+    except click.ClickException as e:
+        click.echo(
+            f"Warning: {e.format_message()} Skipping local event type validation.",
+            err=True,
+        )
+        return None
+
+
+class EventType(click.ParamType):
+    name = "event_type"
 
     def get_metavar(self, param, ctx=None):
         # click >= 8.2 passes ctx; keep it optional to support both 8.1 and 8.2+
         return "EVENT_TYPE"
 
-    def get_missing_message(self, param):
-        return "Use 'cobo webhook events' to see available event types."
-
-    def convert(self, value, param, ctx):
-        self.choices = self.choices_func(ctx)
-        return super().convert(value, param, ctx)
-
-
-def get_event_types(ctx):
-    command_context: CommandContext = ctx.obj
-    spec = command_context.api_spec or load_api_spec()
-    return get_valid_event_types(spec)
+    def get_missing_message(self, param, ctx=None):
+        return EVENTS_HINT
 
 
 @webhook.command("trigger", help="Manually trigger a webhook event.")
-@click.argument("event_type", type=LazyChoice(get_event_types))
+@click.argument("event_type", type=EventType())
 @click.option("--override", help="JSON string to override event data.")
 @click.pass_context
 def trigger(ctx, event_type, override):
-    command_context: CommandContext = ctx.obj
-    command_context.api_spec or load_api_spec()
+    valid_event_types = fetch_event_types_or_warn(ctx)
+    if valid_event_types is not None and event_type not in valid_event_types:
+        raise click.BadParameter(
+            f"Unknown event type '{event_type}'. {EVENTS_HINT}",
+            param_hint="'EVENT_TYPE'",
+        )
 
     payload = {"event_type": event_type}
 
@@ -90,12 +127,14 @@ def trigger(ctx, event_type, override):
 @webhook.command("events", help="List all available webhook event types.")
 @click.pass_context
 def list_events(ctx):
-    command_context: CommandContext = ctx.obj
-    spec = command_context.api_spec or load_api_spec()
-    event_types = get_valid_event_types(spec)
+    definitions = fetch_event_definitions(ctx)
     click.echo("Available webhook event types:")
-    for event_type in event_types:
-        click.echo(f"- {event_type}")
+    for definition in definitions:
+        description = definition.get("description") or definition.get("title")
+        if description:
+            click.echo(f"- {definition['event_type']}: {description}")
+        else:
+            click.echo(f"- {definition['event_type']}")
 
 
 @webhook.command("listen", help="Listen for webhook events using WebSocket.")
@@ -104,18 +143,28 @@ def list_events(ctx):
 @click.pass_context
 def listen(ctx, events, forward):
     command_context: CommandContext = ctx.obj
-    spec = command_context.api_spec or load_api_spec()
 
     # Validate event types
-    valid_event_types = get_valid_event_types(spec)
     if events:
         event_list = [e.strip() for e in events.split(",")]
-        invalid_events = set(event_list) - set(valid_event_types)
-        if invalid_events:
-            click.echo(f"Error: Invalid event types: {', '.join(invalid_events)}")
-            return
+        valid_event_types = fetch_event_types_or_warn(ctx)
+        if valid_event_types is not None:
+            invalid_events = set(event_list) - set(valid_event_types)
+            if invalid_events:
+                click.echo(
+                    f"Error: Invalid event types: {', '.join(invalid_events)}. "
+                    f"{EVENTS_HINT}"
+                )
+                return
     else:
-        event_list = valid_event_types
+        try:
+            definitions = fetch_event_definitions(ctx)
+        except click.ClickException as e:
+            raise click.ClickException(
+                f"{e.format_message()} Pass --events to choose the event types "
+                "to listen for."
+            )
+        event_list = [d["event_type"] for d in definitions]
 
     # Construct WebSocket URL
     base_url = command_context.config_manager.get_config("websocket_host")

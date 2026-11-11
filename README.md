@@ -45,6 +45,12 @@ Check full documentation [here](https://www.cobo.com/developers/v2/developer-too
 - `--spec PATH`: Path to a custom OpenAPI specification file.
 - `--help`: Show help message and exit.
 
+#### OpenAPI specification (optional)
+
+The OpenAPI specification is optional. Supply it with `--spec PATH`, or set a download URL with `cobo config set spec_url <url>` (or the `COBO_SPEC_URL` environment variable); the downloaded file is cached at `~/.cobo/openapi.yaml`, refreshed weekly, and can be refreshed manually with `cobo doc -u`.
+
+Without a spec, `cobo get/post/put/delete` still work: requests are sent as given, without local parameter validation (`--key value` pairs become query parameters for GET/DELETE and a JSON body for POST/PUT, where JSON arrays and objects such as `'["a","b"]'` are parsed and every other value, numbers included, is sent as a string). Listing (`-l`), describing (`-d`) and `cobo doc /path` require a spec.
+
 ## Commands
 
 ### Application Management
