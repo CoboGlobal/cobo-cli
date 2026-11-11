@@ -105,7 +105,10 @@ def generate_keys(
     elif key_type == "APP":
         click.echo("Secret key has been saved securely in the .env file.")
     else:
-        current_env = command_context.config_manager.get_config("environment")
+        # The same call set_config used to choose the section, so the
+        # message names where the key actually went. get_config reports
+        # the persisted setting, which `--env` does not update.
+        current_env = command_context.config_manager.load_env_type()
         click.echo(
             f"Secret key has been saved securely in the {current_env} environment section."
         )

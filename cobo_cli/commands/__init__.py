@@ -10,6 +10,7 @@ from .keys import keys
 from .login import login
 from .logout import logout
 from .logs import logs
+from .node import node
 from .open import open
 from .post import post_api
 from .put import put_api
@@ -34,4 +35,5 @@ __all__ = [
     "graphql",
     "skill",
     "webhook",
+    "node",
 ]

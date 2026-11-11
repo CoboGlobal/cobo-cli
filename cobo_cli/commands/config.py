@@ -5,6 +5,24 @@ import click
 
 from cobo_cli.data.context import CommandContext
 
+SENSITIVE_KEY_MARKERS = ("secret", "token", "password", "private")
+
+
+def mask_if_sensitive(key: str, value) -> str:
+    """Mask sensitive config values so they are never echoed to stdout.
+
+    `cobo config set api_secret <private key>` used to print the key in full,
+    leaking it through terminal recordings, collected logs and shared history.
+    Only the last 4 characters are kept, so the user can still tell which
+    value was written.
+    """
+    text = str(value)
+    if not any(m in key.lower() for m in SENSITIVE_KEY_MARKERS):
+        return text
+    if len(text) <= 4:
+        return "*" * len(text)
+    return f"{'*' * 8}{text[-4:]}"
+
 
 @click.group(
     "config",
@@ -28,7 +46,7 @@ def set_config(ctx: click.Context, key: str, value: str):
     command_context: CommandContext = ctx.obj
     config_manager = command_context.config_manager
     if config_manager.set_config(key, value):
-        click.echo(f"Configuration '{key}' set to '{value}'")
+        click.echo(f"Configuration '{key}' set to '{mask_if_sensitive(key, value)}'")
     else:
         click.echo(
             f"Failed to set configuration '{key}'. Make sure it's a valid configuration key."
@@ -44,7 +62,7 @@ def get_config(ctx: click.Context, key: str):
     config_manager = command_context.config_manager
     value = config_manager.get_config(key)
     if value is not None:
-        click.echo(f"{key}: {value}")
+        click.echo(f"{key}: {mask_if_sensitive(key, value)}")
     else:
         click.echo(f"Configuration '{key}' not found")
 
@@ -58,7 +76,7 @@ def list_config(ctx: click.Context):
     configs = config_manager.list_configs()
     if configs:
         for key, value in configs.items():
-            click.echo(f"{key}: {value}")
+            click.echo(f"{key}: {mask_if_sensitive(key, value)}")
     else:
         click.echo("No configurations found")
 

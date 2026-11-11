@@ -7,23 +7,42 @@ import yaml
 
 from cobo_cli.utils.config import get_config_path
 
+SPEC_HINT = (
+    "This command needs the OpenAPI specification. Pass --spec <file>, or set "
+    "spec_url (cobo config set spec_url <url>) / COBO_SPEC_URL."
+)
 
-def update_spec():
-    url = "https://raw.githubusercontent.com/CoboGlobal/developer-site/master/v2/cobo_waas2_openapi_spec/dev_openapi.yaml"  # noqa: E501
-    config_dir = get_config_path()
-    spec_file = os.path.join(config_dir, "openapi.yaml")
 
+def get_cached_spec_path():
+    return os.path.join(get_config_path(), "openapi.yaml")
+
+
+def update_spec(spec_url):
+    if not spec_url:
+        return False
+
+    spec_file = get_cached_spec_path()
     try:
-        response = requests.get(url)
+        response = requests.get(spec_url, timeout=30)
         response.raise_for_status()
+        os.makedirs(os.path.dirname(spec_file), exist_ok=True)
         with open(spec_file, "wb") as f:
             f.write(response.content)
-        click.echo("OpenAPI specification file downloaded successfully.")
-    except requests.RequestException as e:
-        click.echo(f"Failed to download OpenAPI specification file: {e}")
+        return True
+    except (requests.RequestException, OSError) as e:
+        click.echo(
+            f"Warning: failed to download OpenAPI specification file: {e}", err=True
+        )
+        return False
 
 
-def load_api_spec(custom_spec_path=None):
+def require_api_spec(spec):
+    if spec is None:
+        raise click.ClickException(SPEC_HINT)
+    return spec
+
+
+def load_api_spec(custom_spec_path=None, spec_url=None):
     def is_spec_outdated(file_path):
         # Check if the file is older than one week
         one_week_ago = time.time() - 7 * 24 * 60 * 60
@@ -34,21 +53,34 @@ def load_api_spec(custom_spec_path=None):
             raise click.ClickException(
                 f"Custom OpenAPI specification file not found: {custom_spec_path}"
             )
-        spec_file = custom_spec_path
-    else:
-        config_dir = get_config_path()
-        spec_file = os.path.join(config_dir, "openapi.yaml")
-        if not os.path.exists(spec_file) or is_spec_outdated(spec_file):
-            click.echo(
-                "OpenAPI specification file not found or outdated. Downloading..."
+        try:
+            with open(custom_spec_path, "rb") as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            raise click.ClickException(
+                f"Failed to open OpenAPI specification file: {e}"
             )
-            update_spec()
+
+    spec_file = get_cached_spec_path()
+    if spec_url and (not os.path.exists(spec_file) or is_spec_outdated(spec_file)):
+        # A stale cache is still better than nothing if the refresh fails.
+        update_spec(spec_url)
+
+    if not os.path.exists(spec_file):
+        return None
 
     try:
         with open(spec_file, "rb") as f:
-            return yaml.safe_load(f)
+            spec = yaml.safe_load(f)
+        if not isinstance(spec, dict):
+            raise ValueError("not an OpenAPI document")
+        return spec
     except Exception as e:
-        raise click.ClickException(f"Failed to open OpenAPI specification file: {e}")
+        click.echo(
+            f"Warning: failed to parse cached OpenAPI specification {spec_file}: {e}",
+            err=True,
+        )
+        return None
 
 
 def get_api_details(spec, path, method):

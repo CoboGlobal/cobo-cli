@@ -1,7 +1,5 @@
 import logging
-
-# Import version from pyproject.toml
-from importlib.metadata import version as get_version
+from importlib.metadata import version as get_version  # version from pyproject.toml
 
 import click
 
@@ -18,6 +16,7 @@ from cobo_cli.commands import (
     login,
     logout,
     logs,
+    node,
     open,
     post_api,
     put_api,
@@ -135,6 +134,7 @@ cli.add_command(logs)
 cli.add_command(auth)
 cli.add_command(skill)
 cli.add_command(webhook)
+cli.add_command(node)
 
 # Add API commands
 cli.add_command(get_api, name="get")
